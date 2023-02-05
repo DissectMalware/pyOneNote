@@ -8,21 +8,37 @@ class FileNodeListHeader:
 
 
 class FileNodeList:
-    def __init__(self, file, file_chunck_reference):
-        file.seek(file_chunck_reference.stp)
-        self.end = file_chunck_reference.stp + file_chunck_reference.cb
-        self.fileNodeListHeader = FileNodeListHeader(file)
-        self.fragment = FileNodeListFragment(file, self.end)
+    def __init__(self, file, file_chunk_reference):
+        file.seek(file_chunk_reference.stp)
+        self.end = file_chunk_reference.stp + file_chunk_reference.cb
+        self.fragments = []
+
+        # FileNodeList can contain one or more FileNodeListFragment
+        while True:
+            section_end = file_chunk_reference.stp + file_chunk_reference.cb
+            fragment = FileNodeListFragment(file, section_end)
+            self.fragments.append(fragment)
+            if fragment.nextFragment.isFcrNil():
+                break
+            file_chunk_reference = fragment.nextFragment
+            file.seek(fragment.nextFragment.stp)
 
 
 class FileNodeListFragment:
     def __init__(self, file, end):
         self.fileNodes = []
+        self.fileNodeListHeader = FileNodeListHeader(file)
+
+        # FileNodeListFragment can have one or more FileNode
         while file.tell() + 24 < end:
             node = FileNode(file)
             self.fileNodes.append(node)
-            if hasattr(node, 'data') and isinstance(node.data, ObjectGroupEndFND):
+            if node.file_node_header.file_node_id == 255 or node.file_node_header.file_node_id == 0:
                 break
+
+        file.seek(end-20)
+        self.nextFragment = FileChunkReference64x32(file.read(12))
+        self.footer, = struct.unpack('<Q', file.read(8))
 
 
 class FileNodeHeader:
@@ -105,14 +121,17 @@ class FileNode:
             self.data = DataSignatureGroupDefinitionFND(file)
         elif self.file_node_header.file_node_type == "ObjectDeclaration2RefCountFND":
             self.data = ObjectDeclaration2RefCountFND(file, self.file_node_header)
-        elif self.file_node_header.file_node_type == "ObjectGroupEndFND":
-            self.data = ObjectGroupEndFND()
         elif self.file_node_header.file_node_type == "ObjectDeclaration2Body":
             self.data = ObjectDeclaration2Body(file)
         elif self.file_node_header.file_node_type == "ObjectInfoDependencyOverridesFND":
             self.data = ObjectInfoDependencyOverridesFND(file, self.file_node_header)
         elif self.file_node_header.file_node_type == "RootObjectReference3FND":
             self.data = RootObjectReference3FND(file)
+        elif self.file_node_header.file_node_type in ["RevisionManifestEndFND", "ObjectGroupEndFND"]:
+            # no data part
+            self.data = None
+        else:
+            p = 1
 
         current_offset = file.tell()
 
@@ -188,17 +207,19 @@ class FileNodeChunkReference:
         return 'FileChunkReference:(stp:{}, cb:{})'.format(self.stp, self.cb)
 
 
-class FileChunkReference64x32:
+class FileChunkReference64x32(FileNodeChunkReference):
     def __init__(self, bytes):
         self.stp, self.cb = struct.unpack('<QI', bytes)
+        self.invalid = 0xffffffffffffffff
 
     def __repr__(self):
         return 'FileChunkReference64x32:(stp:{}, cb:{})'.format(self.stp, self.cb)
 
 
-class FileChunkReference32:
+class FileChunkReference32(FileNodeChunkReference):
     def __init__(self, bytes):
         self.stp, self.cb = struct.unpack('<II', bytes)
+        self.invalid = 0xffffffff
 
     def __repr__(self):
         return 'FileChunkReference32:(stp:{}, cb:{})'.format(self.stp, self.cb)
@@ -323,6 +344,3 @@ class JCID:
         self.IsReadOnly = ((self.jcid >> 20) & 0x1) == 1
 
 
-class ObjectGroupEndFND:
-    def __init__(self):
-        pass

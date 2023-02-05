@@ -100,6 +100,7 @@ class FileNodeHeader:
 class FileNode:
     def __init__(self, file):
         self.file_node_header = FileNodeHeader(file)
+        self.children = []
 
         if self.file_node_header.file_node_type == "ObjectGroupStartFND":
             self.data = ObjectGroupStartFND(file)
@@ -121,12 +122,22 @@ class FileNode:
             self.data = DataSignatureGroupDefinitionFND(file)
         elif self.file_node_header.file_node_type == "ObjectDeclaration2RefCountFND":
             self.data = ObjectDeclaration2RefCountFND(file, self.file_node_header)
+        elif self.file_node_header.file_node_type == "ReadOnlyObjectDeclaration2RefCountFND":
+            self.data = ReadOnlyObjectDeclaration2RefCountFND(file, self.file_node_header)
+        elif self.file_node_header.file_node_type == "FileDataStoreListReferenceFND":
+            self.data = FileDataStoreListReferenceFND(file, self.file_node_header)
+        elif self.file_node_header.file_node_type == "FileDataStoreObjectReferenceFND":
+            self.data = FileDataStoreObjectReferenceFND(file, self.file_node_header)
         elif self.file_node_header.file_node_type == "ObjectDeclaration2Body":
             self.data = ObjectDeclaration2Body(file)
         elif self.file_node_header.file_node_type == "ObjectInfoDependencyOverridesFND":
             self.data = ObjectInfoDependencyOverridesFND(file, self.file_node_header)
         elif self.file_node_header.file_node_type == "RootObjectReference3FND":
             self.data = RootObjectReference3FND(file)
+        elif self.file_node_header.file_node_type == "ObjectSpaceManifestRootFND":
+            self.data = ObjectSpaceManifestRootFND(file)
+        elif self.file_node_header.file_node_type == "ObjectDeclarationFileData3RefCountFND":
+            self.data = ObjectDeclarationFileData3RefCountFND(file)
         elif self.file_node_header.file_node_type in ["RevisionManifestEndFND", "ObjectGroupEndFND"]:
             # no data part
             self.data = None
@@ -136,7 +147,7 @@ class FileNode:
         current_offset = file.tell()
 
         if self.file_node_header.baseType == 2:
-            FileNodeList(file, self.data.ref)
+            self.children.append(FileNodeList(file, self.data.ref))
 
         file.seek(current_offset)
 
@@ -230,6 +241,11 @@ class ObjectGroupStartFND:
         self.oid = ExtendedGUID(file)
 
 
+class ObjectSpaceManifestRootFND:
+    def __init__(self, file):
+        self.gosidRoot = ExtendedGUID(file)
+
+
 class ObjectSpaceManifestListStartFND:
     def __init__(self, file):
         self.gosid = ExtendedGUID(file)
@@ -283,6 +299,12 @@ class ObjectDeclaration2RefCountFND:
         self.cRef, = struct.unpack('<B', file.read(1))
 
 
+class ReadOnlyObjectDeclaration2RefCountFND:
+    def __init__(self, file, file_node_header):
+        self.base = ObjectDeclaration2RefCountFND(file, file_node_header)
+        self.md5Hash = struct.unpack('16s', file.read(16))
+
+
 class ObjectDeclaration2Body:
     def __init__(self, file):
         self.oid = CompactID(file)
@@ -297,6 +319,18 @@ class ObjectInfoDependencyOverridesFND:
         self.ref = FileNodeChunkReference(file, file_node_header.stpFormat, file_node_header.cbFormat)
         if self.ref.isFcrNil():
             data = ObjectInfoDependencyOverrideData(file)
+
+
+class FileDataStoreListReferenceFND:
+    def __init__(self, file, file_node_header):
+        self.ref = FileNodeChunkReference(file, file_node_header.stpFormat, file_node_header.cbFormat)
+
+
+class FileDataStoreObjectReferenceFND:
+    def __init__(self, file, file_node_header):
+        self.ref = FileNodeChunkReference(file, file_node_header.stpFormat, file_node_header.cbFormat)
+        self.guidReference, self.n = struct.unpack('<16sI', file.read(20))
+        self.guidReference = uuid.UUID(bytes_le=self.guidReference)
 
 
 class ObjectInfoDependencyOverrideData:
@@ -326,6 +360,16 @@ class RootObjectReference3FND:
         self.oidRoot = ExtendedGUID(file)
         self.RootRole, = struct.unpack('<I', file.read(4))
 
+
+class ObjectDeclarationFileData3RefCountFND:
+    def __init__(self, file):
+        self.oid = CompactID(file)
+        self.jcid = JCID(file)
+        self.cRef, = struct.unpack('<B', file.read(1))
+        self.FileDataReference = StringInStorageBuffer(file)
+        self.Extension = StringInStorageBuffer(file)
+
+
 class CompactID:
     def __init__(self, file):
         data, = struct.unpack('<I', file.read(4))
@@ -344,3 +388,9 @@ class JCID:
         self.IsReadOnly = ((self.jcid >> 20) & 0x1) == 1
 
 
+class StringInStorageBuffer:
+    def __init__(self, file):
+        self.cch, = struct.unpack('<I', file.read(4))
+        self.length_in_bytes = self.cch*2
+        self.StringData, = struct.unpack('{}s'.format(self.length_in_bytes), file.read(self.length_in_bytes))
+        self.StringData = self.StringData.decode('utf-16')

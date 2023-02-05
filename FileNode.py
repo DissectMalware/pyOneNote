@@ -111,6 +111,8 @@ class FileNode:
             self.data = ObjectDeclaration2Body(file)
         elif self.file_node_header.file_node_type == "ObjectInfoDependencyOverridesFND":
             self.data = ObjectInfoDependencyOverridesFND(file, self.file_node_header)
+        elif self.file_node_header.file_node_type == "RootObjectReference3FND":
+            self.data = RootObjectReference3FND(file)
 
         current_offset = file.tell()
 
@@ -295,8 +297,13 @@ class ObjectInfoDependencyOverride8:
 class ObjectInfoDependencyOverride32:
     def __init__(self, file):
         self.oid = CompactID(file)
-        self.cRef, = struct.unpack('<I>', file.read(1))
+        self.cRef, = struct.unpack('<I', file.read(4))
 
+
+class RootObjectReference3FND:
+    def __init__(self, file):
+        self.oidRoot = ExtendedGUID(file)
+        self.RootRole, = struct.unpack('<I', file.read(4))
 
 class CompactID:
     def __init__(self, file):

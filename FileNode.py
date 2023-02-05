@@ -329,8 +329,12 @@ class FileDataStoreListReferenceFND:
 class FileDataStoreObjectReferenceFND:
     def __init__(self, file, file_node_header):
         self.ref = FileNodeChunkReference(file, file_node_header.stpFormat, file_node_header.cbFormat)
-        self.guidReference, self.n = struct.unpack('<16sI', file.read(20))
+        self.guidReference, = struct.unpack('<16s', file.read(16))
         self.guidReference = uuid.UUID(bytes_le=self.guidReference)
+        current_offset = file.tell()
+        file.seek(self.ref.stp)
+        self.fileDataStoreObject = FileDataStoreObject(file, self.ref)
+        file.seek(current_offset)
 
 
 class ObjectInfoDependencyOverrideData:
@@ -394,3 +398,13 @@ class StringInStorageBuffer:
         self.length_in_bytes = self.cch*2
         self.StringData, = struct.unpack('{}s'.format(self.length_in_bytes), file.read(self.length_in_bytes))
         self.StringData = self.StringData.decode('utf-16')
+
+
+class FileDataStoreObject:
+    def __init__(self, file, fileNodeChunkReference):
+        self.guidHeader, self.cbLength, self.unused, self.reserved = struct.unpack('<16sQ4s8s', file.read(36))
+        self.FileData, = struct.unpack('{}s'.format(self.cbLength), file.read(self.cbLength))
+        file.seek(fileNodeChunkReference.stp + fileNodeChunkReference.cb - 16)
+        self.guidFooter, = struct.unpack('16s', file.read(16))
+        self.guidHeader = uuid.UUID(bytes_le=self.guidHeader)
+        self.guidFooter = uuid.UUID(bytes_le=self.guidFooter)

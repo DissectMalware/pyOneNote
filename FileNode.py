@@ -21,7 +21,7 @@ class FileNodeListFragment:
         while file.tell() + 24 < end:
             node = FileNode(file)
             self.fileNodes.append(node)
-            if hasattr(node, 'data') and isinstance( node.data, ObjectGroupEndFND):
+            if hasattr(node, 'data') and isinstance(node.data, ObjectGroupEndFND):
                 break
 
 
@@ -109,6 +109,8 @@ class FileNode:
             self.data = ObjectGroupEndFND()
         elif self.file_node_header.file_node_type == "ObjectDeclaration2Body":
             self.data = ObjectDeclaration2Body(file)
+        elif self.file_node_header.file_node_type == "ObjectInfoDependencyOverridesFND":
+            self.data = ObjectInfoDependencyOverridesFND(file, self.file_node_header)
 
         current_offset = file.tell()
 
@@ -135,17 +137,21 @@ class FileNodeChunkReference:
         if stpFormat == 0:
             stp_type = 'Q'
             data_size += 8
+            self.invalid = 0xffffffffffffffff
         elif stpFormat == 1:
             stp_type = 'I'
             data_size += 4
+            self.invalid = 0xffffffff
         elif stpFormat == 2:
             stp_type = 'H'
             data_size += 2
             stp_compressed = True
+            self.invalid = 0x7fff8
         elif stpFormat == 3:
             stp_type = 'I'
             data_size += 4
             stp_compressed = True
+            self.invalid = 0x7fffffff8
 
         cb_type = ''
         cb_compressed = False
@@ -170,6 +176,11 @@ class FileNodeChunkReference:
 
         if cb_compressed:
             self.cb *= 8
+
+    def isFcrNil(self):
+        res = False
+        res = (self.stp & self.invalid) == self.invalid and self.cb == 0
+        return res
 
     def __repr__(self):
         return 'FileChunkReference:(stp:{}, cb:{})'.format(self.stp, self.cb)
@@ -256,6 +267,35 @@ class ObjectDeclaration2Body:
         data, = struct.unpack('B', file.read(1))
         self.fHasOidReferences = (data & 0x1) != 0
         self.fHasOsidReferences = (data & 0x2) != 0
+
+
+class ObjectInfoDependencyOverridesFND:
+    def __init__(self, file, file_node_header):
+        self.ref = FileNodeChunkReference(file, file_node_header.stpFormat, file_node_header.cbFormat)
+        if self.ref.isFcrNil():
+            data = ObjectInfoDependencyOverrideData(file)
+
+
+class ObjectInfoDependencyOverrideData:
+    def __init__(self, file):
+        self.c8BitOverrides, self.c32BitOverrides, self.crc = struct.unpack('<III', file.read(12))
+        self.Overrides1 = []
+        for i in range(self.c8BitOverrides):
+            self.Overrides1.append(ObjectInfoDependencyOverride8(file))
+        for i in range(self.c32BitOverrides):
+            self.Overrides1.append(ObjectInfoDependencyOverride32(file))
+
+
+class ObjectInfoDependencyOverride8:
+    def __init__(self, file):
+        self.oid = CompactID(file)
+        self.cRef, = struct.unpack('B', file.read(1))
+
+
+class ObjectInfoDependencyOverride32:
+    def __init__(self, file):
+        self.oid = CompactID(file)
+        self.cRef, = struct.unpack('<I>', file.read(1))
 
 
 class CompactID:

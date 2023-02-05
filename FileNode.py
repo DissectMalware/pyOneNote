@@ -4,7 +4,7 @@ import struct
 
 class FileNodeListHeader:
     def __init__(self, file):
-        self.uintMagic, self.FileNodeListID, self.nFragmentSequence  = struct.unpack('<8sII', file.read(16))
+        self.uintMagic, self.FileNodeListID, self.nFragmentSequence = struct.unpack('<8sII', file.read(16))
 
 
 class FileNodeList:
@@ -15,11 +15,14 @@ class FileNodeList:
         self.fragment = FileNodeListFragment(file, self.end)
 
 
-
 class FileNodeListFragment:
     def __init__(self, file, end):
+        self.fileNodes = []
         while file.tell() + 24 < end:
-            self.fileNode = FileNode(file)
+            node = FileNode(file)
+            self.fileNodes.append(node)
+            if hasattr(node, 'data') and isinstance( node.data, ObjectGroupEndFND):
+                break
 
 
 class FileNodeHeader:
@@ -100,6 +103,12 @@ class FileNode:
             self.data = GlobalIdTableEntryFNDX(file)
         elif self.file_node_header.file_node_type == "DataSignatureGroupDefinitionFND":
             self.data = DataSignatureGroupDefinitionFND(file)
+        elif self.file_node_header.file_node_type == "ObjectDeclaration2RefCountFND":
+            self.data = ObjectDeclaration2RefCountFND(file, self.file_node_header)
+        elif self.file_node_header.file_node_type == "ObjectGroupEndFND":
+            self.data = ObjectGroupEndFND()
+        elif self.file_node_header.file_node_type == "ObjectDeclaration2Body":
+            self.data = ObjectDeclaration2Body(file)
 
         current_offset = file.tell()
 
@@ -107,7 +116,6 @@ class FileNode:
             FileNodeList(file, self.data.ref)
 
         file.seek(current_offset)
-
 
 
 class ExtendedGUID:
@@ -233,3 +241,41 @@ class DataSignatureGroupDefinitionFND:
     def __init__(self, file):
         self.DataSignatureGroup = ExtendedGUID(file)
 
+
+class ObjectDeclaration2RefCountFND:
+    def __init__(self, file, file_node_header):
+        self.ref = FileNodeChunkReference(file, file_node_header.stpFormat, file_node_header.cbFormat)
+        self.body = ObjectDeclaration2Body(file)
+        self.cRef, = struct.unpack('<B', file.read(1))
+
+
+class ObjectDeclaration2Body:
+    def __init__(self, file):
+        self.oid = CompactID(file)
+        self.jcid = JCID(file)
+        data, = struct.unpack('B', file.read(1))
+        self.fHasOidReferences = (data & 0x1) != 0
+        self.fHasOsidReferences = (data & 0x2) != 0
+
+
+class CompactID:
+    def __init__(self, file):
+        data, = struct.unpack('<I', file.read(4))
+        self.n = data & 0xff
+        self.guidIndex = data >> 8
+
+
+class JCID:
+    def __init__(self, file):
+        self.jcid, = struct.unpack('<I', file.read(4))
+        self.index = self.jcid & 0xffff
+        self.IsBinary = ((self.jcid >> 16) & 0x1) == 1
+        self.IsPropertySet = ((self.jcid >> 17) & 0x1) == 1
+        self.IsGraphNode = ((self.jcid >> 18) & 0x1) == 1
+        self.IsFileData = ((self.jcid >> 19) & 0x1) == 1
+        self.IsReadOnly = ((self.jcid >> 20) & 0x1) == 1
+
+
+class ObjectGroupEndFND:
+    def __init__(self):
+        pass

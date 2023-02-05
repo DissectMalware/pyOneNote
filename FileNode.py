@@ -98,6 +98,8 @@ class FileNode:
             self.data = ObjectGroupListReferenceFND(file, self.file_node_header)
         elif self.file_node_header.file_node_type == "GlobalIdTableEntryFNDX":
             self.data = GlobalIdTableEntryFNDX(file)
+        elif self.file_node_header.file_node_type == "DataSignatureGroupDefinitionFND":
+            self.data = DataSignatureGroupDefinitionFND(file)
 
         current_offset = file.tell()
 
@@ -225,4 +227,9 @@ class GlobalIdTableEntryFNDX:
     def __init__(self, file):
         self.index, self.guid = struct.unpack('<I16s', file.read(20))
         self.guid = uuid.UUID(bytes_le=self.guid)
+
+
+class DataSignatureGroupDefinitionFND:
+    def __init__(self, file):
+        self.DataSignatureGroup = ExtendedGUID(file)
 

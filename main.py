@@ -1,9 +1,11 @@
-import uuid
-import struct
 import Header
 import FileNode
 import sys
 import os
+from typing import BinaryIO
+import logging
+
+log = logging.getLogger()
 
 
 def traverse_nodes(root_file_node_list, nodes, filters):
@@ -16,12 +18,30 @@ def traverse_nodes(root_file_node_list, nodes, filters):
                 traverse_nodes(child_file_node_list, nodes, filters)
 
 
-def dump_files(root_file_node_list, output_dir, extension=''):
+def dump_files(file: BinaryIO, output_dir: str, extension: str=''):
+    """
+        file: open(x, "rb")
+        output_dir: path where to store extracted files
+        extension: add extension to extracted filename(s)
+    """
+    if file.read(16) != b"\xE4\x52\x5C\x7B\x8C\xD8\xA7\x4D\xAE\xB1\x53\x78\xD0\x29\x96\xD3":
+        log.error("please provide valid One file")
+        return
+
+    header = Header.Header(file)
+    root_file_node_list = FileNode.FileNodeList(file, header.fcrFileNodeListRoot)
+
+    # nodes = []
+    # filters = []
+    # traverse_nodes(root_file_node_list, nodes, filters)
+    # for node in nodes:
+    #     if hasattr(node, 'data') and node.data:
+    #         print(node.data)
+
     nodes = []
     if not os.path.exists(output_dir):
         os.mkdir(output_dir)
 
-    count = 0
     filters = ['FileDataStoreObjectReferenceFND',
                'ObjectDeclarationFileData3RefCountFND']
 
@@ -76,21 +96,4 @@ if __name__ == '__main__':
         extension = sys.argv[3]
 
     with open(sys.argv[1], 'rb') as file:
-        header = Header.Header(file)
-        root_file_node_list = FileNode.FileNodeList(file, header.fcrFileNodeListRoot)
-
-        # nodes = []
-        # filters = []
-        # traverse_nodes(root_file_node_list, nodes, filters)
-        # for node in nodes:
-        #     if hasattr(node, 'data') and node.data:
-        #         print(node.data)
-
-        dump_files(root_file_node_list, output_dir, extension)
-
-
-
-
-
-
-
+        dump_files(file, output_dir, extension)

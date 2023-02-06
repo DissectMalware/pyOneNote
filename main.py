@@ -31,13 +31,13 @@ def dump_files(root_file_node_list, output_dir, extension=''):
         if hasattr(node, 'data') and node.data:
             if isinstance(node.data, FileNode.FileDataStoreObjectReferenceFND):
                 if not str(node.data.guidReference) in files:
-                    files[ str(node.data.guidReference)] = {}
+                    files[ str(node.data.guidReference)] = {'extension':'', 'content':''}
                 files[str(node.data.guidReference)]['content'] = node.data.fileDataStoreObject.FileData
             elif isinstance(node.data, FileNode.ObjectDeclarationFileData3RefCountFND):
                 guid = node.data.FileDataReference.StringData.replace('<ifndf>{', '').replace('}', '')
                 guid = guid.lower()
                 if not guid in files:
-                    files[guid] = {}
+                    files[guid] = {'extension':'', 'content':''}
                 files[guid]['extension'] = node.data.Extension.StringData
 
     counter = 0
@@ -78,6 +78,14 @@ if __name__ == '__main__':
     with open(sys.argv[1], 'rb') as file:
         header = Header.Header(file)
         root_file_node_list = FileNode.FileNodeList(file, header.fcrFileNodeListRoot)
+
+        # nodes = []
+        # filters = []
+        # traverse_nodes(root_file_node_list, nodes, filters)
+        # for node in nodes:
+        #     if hasattr(node, 'data') and node.data:
+        #         print(node.data)
+
         dump_files(root_file_node_list, output_dir, extension)
 
 

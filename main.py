@@ -71,10 +71,14 @@ if __name__ == '__main__':
     if len(sys.argv) == 3:
         output_dir = sys.argv[2]
 
+    extension = ''
+    if len(sys.argv) == 4:
+        extension = sys.argv[3]
+
     with open(sys.argv[1], 'rb') as file:
         header = Header.Header(file)
         root_file_node_list = FileNode.FileNodeList(file, header.fcrFileNodeListRoot)
-        dump_files(root_file_node_list, output_dir)
+        dump_files(root_file_node_list, output_dir, extension)
 
 
 

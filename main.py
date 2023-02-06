@@ -75,6 +75,15 @@ def dump_files(file: BinaryIO, output_dir: str, extension: str = ""):
         counter += 1
 
 
+def check_valid(file):
+    if file.read(16) in (
+        b"\xE4\x52\x5C\x7B\x8C\xD8\xA7\x4D\xAE\xB1\x53\x78\xD0\x29\x96\xD3",
+        b"\xA1\x2F\xFF\x43\xD9\xEF\x76\x4C\x9E\xE2\x10\xEA\x57\x22\x76\x5F",
+    ):
+        return True
+    return False
+
+
 if __name__ == "__main__":
 
     if len(sys.argv) < 2:
@@ -94,10 +103,7 @@ if __name__ == "__main__":
         exit()
 
     with open(sys.argv[1], "rb") as file:
-        if file.read(16) not in (
-            b"\xE4\x52\x5C\x7B\x8C\xD8\xA7\x4D\xAE\xB1\x53\x78\xD0\x29\x96\xD3",
-            b"\xA1\x2F\xFF\x43\xD9\xEF\x76\x4C\x9E\xE2\x10\xEA\x57\x22\x76\x5F",
-        ):
+        if not check_valid(file):
             log.error("please provide valid One file")
             exit()
 

@@ -336,6 +336,12 @@ class FileDataStoreObjectReferenceFND:
         self.fileDataStoreObject = FileDataStoreObject(file, self.ref)
         file.seek(current_offset)
 
+    def __str__(self):
+        return 'FileDataStoreObjectReferenceFND: (guidReference:{},fileDataStoreObject:{}'.format(
+            self.guidReference,
+            str(self.fileDataStoreObject)
+        )
+
 
 class ObjectInfoDependencyOverrideData:
     def __init__(self, file):
@@ -373,6 +379,13 @@ class ObjectDeclarationFileData3RefCountFND:
         self.FileDataReference = StringInStorageBuffer(file)
         self.Extension = StringInStorageBuffer(file)
 
+    def __str__(self):
+        return 'ObjectDeclarationFileData3RefCountFND: (jcid:{}, Extension:{}, FileDataReference:{}'.format(
+            self.jcid,
+            self.Extension,
+            self.FileDataReference
+        )
+
 
 class CompactID:
     def __init__(self, file):
@@ -391,6 +404,9 @@ class JCID:
         self.IsFileData = ((self.jcid >> 19) & 0x1) == 1
         self.IsReadOnly = ((self.jcid >> 20) & 0x1) == 1
 
+    def __repr__(self):
+        return str(self.jcid)
+
 
 class StringInStorageBuffer:
     def __init__(self, file):
@@ -398,6 +414,9 @@ class StringInStorageBuffer:
         self.length_in_bytes = self.cch*2
         self.StringData, = struct.unpack('{}s'.format(self.length_in_bytes), file.read(self.length_in_bytes))
         self.StringData = self.StringData.decode('utf-16')
+
+    def __str__(self):
+        return self.StringData
 
 
 class FileDataStoreObject:
@@ -408,3 +427,6 @@ class FileDataStoreObject:
         self.guidFooter, = struct.unpack('16s', file.read(16))
         self.guidHeader = uuid.UUID(bytes_le=self.guidHeader)
         self.guidFooter = uuid.UUID(bytes_le=self.guidFooter)
+
+    def __str__(self):
+        return self.FileData[:128].hex()

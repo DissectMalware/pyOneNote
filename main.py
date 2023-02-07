@@ -86,7 +86,7 @@ def check_valid(file):
     return False
 
 
-def process_one_note_file(file, output_dir, extension):
+def process_onenote_file(file, output_dir, extension):
     if not check_valid(file):
         log.error("please provide valid One file")
         exit()
@@ -119,5 +119,5 @@ if __name__ == "__main__":
 
     with open(sys.argv[1], "rb") as file:
 
-        process_one_note_file(file, output_dir, extension)
+        process_onenote_file(file, output_dir, extension)
 

@@ -16,6 +16,17 @@ def traverse_nodes(root_file_node_list, nodes, filters):
                 traverse_nodes(child_file_node_list, nodes, filters)
 
 
+def print_all_properties(root_file_node_list):
+    nodes = []
+    count = 0
+    filters = ['ObjectDeclaration2RefCountFND']
+
+    traverse_nodes(root_file_node_list, nodes, filters)
+    for node in nodes:
+        if hasattr(node, 'propertySet'):
+            print(node.propertySet.body)
+
+
 def dump_files(root_file_node_list, output_dir, extension=''):
     nodes = []
     if not os.path.exists(output_dir):
@@ -86,6 +97,7 @@ if __name__ == '__main__':
         #     if hasattr(node, 'data') and node.data:
         #         print(node.data)
 
+        print_all_properties(root_file_node_list)
         dump_files(root_file_node_list, output_dir, extension)
 
 

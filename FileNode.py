@@ -155,16 +155,6 @@ class FileNode:
         file.seek(current_offset)
 
 
-class Utility:
-    def __init__(self):
-        pass
-
-    @staticmethod
-    def reposition(file, type, ref):
-        if type == 1 and not ref.isFcrNil:
-            file.seek(ref.stp)
-
-
 class ExtendedGUID:
     def __init__(self, file):
         self.guid, self.n = struct.unpack('<16sI', file.read(20))
@@ -267,15 +257,12 @@ class ObjectSpaceManifestListStartFND:
 class ObjectSpaceManifestListReferenceFND:
     def __init__(self, file, file_node_header):
         self.ref = FileNodeChunkReference(file, file_node_header.stpFormat, file_node_header.cbFormat)
-        Utility.reposition(file, file_node_header.baseType, self.ref)
         self.gosid = ExtendedGUID(file)
 
 
 class RevisionManifestListReferenceFND:
     def __init__(self, file, file_node_header):
         self.ref = FileNodeChunkReference(file, file_node_header.stpFormat, file_node_header.cbFormat)
-        Utility.reposition(file, file_node_header.baseType, self.ref)
-
 
 class RevisionManifestListStartFND:
     def __init__(self, file):
@@ -293,7 +280,6 @@ class RevisionManifestStart6FND:
 class ObjectGroupListReferenceFND:
     def __init__(self, file, file_node_header):
         self.ref = FileNodeChunkReference(file, file_node_header.stpFormat, file_node_header.cbFormat)
-        Utility.reposition(file, file_node_header.baseType, self.ref)
         self.ObjectGroupID = ExtendedGUID(file)
 
 
@@ -311,7 +297,6 @@ class DataSignatureGroupDefinitionFND:
 class ObjectDeclaration2RefCountFND:
     def __init__(self, file, file_node_header):
         self.ref = FileNodeChunkReference(file, file_node_header.stpFormat, file_node_header.cbFormat)
-        Utility.reposition(file, file_node_header.baseType, self.ref)
         self.body = ObjectDeclaration2Body(file)
         self.cRef, = struct.unpack('<B', file.read(1))
 
@@ -334,7 +319,6 @@ class ObjectDeclaration2Body:
 class ObjectInfoDependencyOverridesFND:
     def __init__(self, file, file_node_header):
         self.ref = FileNodeChunkReference(file, file_node_header.stpFormat, file_node_header.cbFormat)
-        Utility.reposition(file, file_node_header.baseType, self.ref)
         if self.ref.isFcrNil():
             data = ObjectInfoDependencyOverrideData(file)
 
@@ -342,13 +326,11 @@ class ObjectInfoDependencyOverridesFND:
 class FileDataStoreListReferenceFND:
     def __init__(self, file, file_node_header):
         self.ref = FileNodeChunkReference(file, file_node_header.stpFormat, file_node_header.cbFormat)
-        Utility.reposition(file, file_node_header.baseType, self.ref)
 
 
 class FileDataStoreObjectReferenceFND:
     def __init__(self, file, file_node_header):
         self.ref = FileNodeChunkReference(file, file_node_header.stpFormat, file_node_header.cbFormat)
-        Utility.reposition(file, file_node_header.baseType, self.ref)
         self.guidReference, = struct.unpack('<16s', file.read(16))
         self.guidReference = uuid.UUID(bytes_le=self.guidReference)
         current_offset = file.tell()

@@ -18,22 +18,24 @@ def traverse_nodes(root_file_node_list, nodes, filters):
                 traverse_nodes(child_file_node_list, nodes, filters)
 
 
-def dump_files(file: BinaryIO, output_dir: str, extension: str = ""):
+def print_all_properties(root_file_node_list):
+    nodes = []
+    count = 0
+    filters = ['ObjectDeclaration2RefCountFND']
+
+    traverse_nodes(root_file_node_list, nodes, filters)
+    for node in nodes:
+        if hasattr(node, 'propertySet'):
+            print(str(node.data.body.jcid))
+            print(node.propertySet.body)
+
+
+def dump_files(root_file_node_list:FileNode.FileNodeList, output_dir: str, extension: str = ""):
     """
     file: open(x, "rb")
     output_dir: path where to store extracted files
     extension: add extension to extracted filename(s)
     """
-
-    header = Header.Header(file)
-    root_file_node_list = FileNode.FileNodeList(file, header.fcrFileNodeListRoot)
-
-    # nodes = []
-    # filters = []
-    # traverse_nodes(root_file_node_list, nodes, filters)
-    # for node in nodes:
-    #     if hasattr(node, 'data') and node.data:
-    #         print(node.data)
 
     nodes = []
     if not os.path.exists(output_dir):
@@ -84,6 +86,19 @@ def check_valid(file):
     return False
 
 
+def process_onenote_file(file, output_dir, extension):
+    if not check_valid(file):
+        log.error("please provide valid One file")
+        exit()
+
+    file.seek(0)
+    header = Header.Header(file)
+    root_file_node_list = FileNode.FileNodeList(file, header.fcrFileNodeListRoot)
+    print_all_properties(root_file_node_list)
+    dump_files(root_file_node_list, output_dir, extension)
+
+
+
 if __name__ == "__main__":
 
     if len(sys.argv) < 2:
@@ -103,9 +118,6 @@ if __name__ == "__main__":
         exit()
 
     with open(sys.argv[1], "rb") as file:
-        if not check_valid(file):
-            log.error("please provide valid One file")
-            exit()
 
-        file.seek(0)
-        dump_files(file, output_dir, extension)
+        process_onenote_file(file, output_dir, extension)
+

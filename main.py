@@ -37,14 +37,6 @@ def dump_files(root_file_node_list:FileNode.FileNodeList, output_dir: str, exten
     extension: add extension to extracted filename(s)
     """
 
-
-    # nodes = []
-    # filters = []
-    # traverse_nodes(root_file_node_list, nodes, filters)
-    # for node in nodes:
-    #     if hasattr(node, 'data') and node.data:
-    #         print(node.data)
-
     nodes = []
     if not os.path.exists(output_dir):
         os.mkdir(output_dir)

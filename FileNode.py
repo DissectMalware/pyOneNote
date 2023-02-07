@@ -264,6 +264,7 @@ class RevisionManifestListReferenceFND:
     def __init__(self, file, file_node_header):
         self.ref = FileNodeChunkReference(file, file_node_header.stpFormat, file_node_header.cbFormat)
 
+
 class RevisionManifestListStartFND:
     def __init__(self, file):
         self.gosid = ExtendedGUID(file)
@@ -403,6 +404,37 @@ class CompactID:
 
 
 class JCID:
+    _jcid_name_mapping= {
+        0x00120001: "jcidReadOnlyPersistablePropertyContainerForAuthor",
+        0x00020001: "jcidPersistablePropertyContainerForTOC",
+        0x00020001: "jcidPersistablePropertyContainerForTOCSection",
+        0x00060007: "jcidSectionNode",
+        0x00060008: "jcidPageSeriesNode",
+        0x0006000B: "jcidPageNode",
+        0x0006000C: "jcidOutlineNode",
+        0x0006000D: "jcidOutlineElementNode",
+        0x0006000E: "jcidRichTextOENode",
+        0x00060011: "jcidImageNode",
+        0x00060012: "jcidNumberListNode",
+        0x00060019: "jcidOutlineGroup",
+        0x00060022: "jcidTableNode",
+        0x00060023: "jcidTableRowNode",
+        0x00060024: "jcidTableCellNode",
+        0x0006002C: "jcidTitleNode",
+        0x00020030: "jcidPageMetaData",
+        0x00020031: "jcidSectionMetaData",
+        0x00060035: "jcidEmbeddedFileNode",
+        0x00060037: "jcidPageManifestNode",
+        0x00020038: "jcidConflictPageMetaData",
+        0x0006003C: "jcidVersionHistoryContent",
+        0x0006003D: "jcidVersionProxy",
+        0x00120043: "jcidNoteTagSharedDefinitionContainer",
+        0x00020044: "jcidRevisionMetaData",
+        0x00020046: "jcidVersionHistoryMetaData",
+        0x0012004D: "jcidParagraphStyleObject",
+        0x0012004D: "jcidParagraphStyleObjectForText"
+    }
+
     def __init__(self, file):
         self.jcid, = struct.unpack('<I', file.read(4))
         self.index = self.jcid & 0xffff
@@ -412,8 +444,14 @@ class JCID:
         self.IsFileData = ((self.jcid >> 19) & 0x1) == 1
         self.IsReadOnly = ((self.jcid >> 20) & 0x1) == 1
 
+    def get_jcid_name(self):
+        return self._jcid_name_mapping[self.jcid] if self.jcid in self._jcid_name_mapping else 'Unknown'
+
+    def __str__(self):
+        return self.get_jcid_name()
+
     def __repr__(self):
-        return str(self.jcid)
+        return self.get_jcid_name()
 
 
 class StringInStorageBuffer:
@@ -446,7 +484,7 @@ class ObjectSpaceObjectPropSet:
         self.OSIDs = None
         if not self.OIDs.header.OsidStreamNotPresent:
             self.OSIDs = ObjectSpaceObjectStreamOfIDs(file)
-        self.ContextIDs= None
+        self.ContextIDs = None
         if self.OIDs.header.ExtendedStreamsPresent:
             self.ContextIDs = ObjectSpaceObjectStreamOfIDs(file)
         self.body = PropertySet(file, self.OIDs, self.OSIDs, self.ContextIDs)
@@ -535,14 +573,14 @@ class PropertySet:
     def __str__(self):
         result = ''
         for i in range(self.cProperties):
-            propertyName =  str(self.rgPrids[i])
-            if propertyName!= 'Unknown':
+            propertyName = str(self.rgPrids[i])
+            if propertyName != 'Unknown':
                 propertyVal = ''
                 if isinstance(self.rgData[i], PrtFourBytesOfLengthFollowedByData):
                     if 'guid' in propertyName.lower():
                         propertyVal = uuid.UUID(bytes_le=self.rgData[i].Data)
                     else:
-                        propertyVal = bytes_le=self.rgData[i].Data.decode('utf-16')
+                        propertyVal = bytes_le = self.rgData[i].Data.decode('utf-16')
                 else:
                     propertyVal = str(self.rgData[i])
                 result += '{}: {}\n'.format(propertyName, propertyVal)

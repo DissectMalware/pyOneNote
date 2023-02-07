@@ -24,6 +24,7 @@ def print_all_properties(root_file_node_list):
     traverse_nodes(root_file_node_list, nodes, filters)
     for node in nodes:
         if hasattr(node, 'propertySet'):
+            print(str(node.data.body.jcid))
             print(node.propertySet.body)
 
 

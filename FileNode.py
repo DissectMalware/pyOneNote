@@ -1,6 +1,7 @@
 import uuid
 import struct
 
+DEBUG = False
 
 class FileNodeListHeader:
     def __init__(self, file):
@@ -98,10 +99,13 @@ class FileNodeHeader:
 
 
 class FileNode:
+    count = 0
     def __init__(self, file):
         self.file_node_header = FileNodeHeader(file)
+        if DEBUG:
+            print(str(file.tell()) + ' ' + self.file_node_header.file_node_type + ' ' + str(self.file_node_header.baseType))
         self.children = []
-
+        FileNode.count += 1
         if self.file_node_header.file_node_type == "ObjectGroupStartFND":
             self.data = ObjectGroupStartFND(file)
         elif self.file_node_header.file_node_type == "ObjectSpaceManifestListReferenceFND":
@@ -143,6 +147,10 @@ class FileNode:
             self.data = ObjectSpaceManifestRootFND(file)
         elif self.file_node_header.file_node_type == "ObjectDeclarationFileData3RefCountFND":
             self.data = ObjectDeclarationFileData3RefCountFND(file)
+        elif self.file_node_header.file_node_type == "RevisionRoleDeclarationFND":
+            self.data = RevisionRoleDeclarationFND(file)
+        elif self.file_node_header.file_node_type == "RevisionManifestStart7FND":
+            self.data = RevisionManifestStart7FND(file)
         elif self.file_node_header.file_node_type in ["RevisionManifestEndFND", "ObjectGroupEndFND"]:
             # no data part
             self.data = None
@@ -305,7 +313,7 @@ class ObjectDeclaration2RefCountFND:
 class ReadOnlyObjectDeclaration2RefCountFND:
     def __init__(self, file, file_node_header):
         self.base = ObjectDeclaration2RefCountFND(file, file_node_header)
-        self.md5Hash = struct.unpack('16s', file.read(16))
+        self.md5Hash, = struct.unpack('16s', file.read(16))
 
 
 class ObjectDeclaration2Body:
@@ -388,6 +396,18 @@ class ObjectDeclarationFileData3RefCountFND:
             self.Extension,
             self.FileDataReference
         )
+
+
+class RevisionRoleDeclarationFND:
+    def __init__(self, file):
+        self.rid = ExtendedGUID(file)
+        self.RevisionRole, = struct.unpack('<I', file.read(4))
+
+
+class RevisionManifestStart7FND:
+    def __init__(self, file):
+        self.base = RevisionManifestStart6FND(file)
+        self.gctxid = ExtendedGUID(file)
 
 
 class CompactID:

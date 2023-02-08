@@ -94,7 +94,7 @@ def process_onenote_file(file, output_dir, extension):
     file.seek(0)
     header = Header.Header(file)
     root_file_node_list = FileNode.FileNodeList(file, header.fcrFileNodeListRoot)
-    print_all_properties(root_file_node_list)
+    # print_all_properties(root_file_node_list)
     dump_files(root_file_node_list, output_dir, extension)
 
 

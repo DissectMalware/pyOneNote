@@ -18,6 +18,16 @@ def traverse_nodes(root_file_node_list, nodes, filters):
                 traverse_nodes(child_file_node_list, nodes, filters)
 
 
+def print_all_properties(root_file_node_list):
+    nodes = []
+    count = 0
+    filters = ['ObjectDeclaration2RefCountFND']
+
+    traverse_nodes(root_file_node_list, nodes, filters)
+    for node in nodes:
+        if hasattr(node, 'propertySet'):
+            print(str(node.data.body.jcid))
+            print(node.propertySet.body)
 
 
 def dump_files(root_file_node_list:FileNode.FileNodeList, output_dir: str, extension: str = ""):
@@ -84,6 +94,7 @@ def process_onenote_file(file, output_dir, extension):
     file.seek(0)
     header = Header.Header(file)
     root_file_node_list = FileNode.FileNodeList(file, header.fcrFileNodeListRoot)
+    # print_all_properties(root_file_node_list)
     dump_files(root_file_node_list, output_dir, extension)
 
 

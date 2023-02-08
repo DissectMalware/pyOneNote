@@ -600,7 +600,10 @@ class PropertySet:
                     if 'guid' in propertyName.lower():
                         propertyVal = uuid.UUID(bytes_le=self.rgData[i].Data)
                     else:
-                        propertyVal = bytes_le = self.rgData[i].Data.decode('utf-16')
+                        try:
+                            propertyVal = self.rgData[i].Data.decode('utf-16')
+                        except:
+                            propertyVal = self.rgData[i].Data.hex()
                 else:
                     propertyVal = str(self.rgData[i])
                 result += '{}: {}\n'.format(propertyName, propertyVal)

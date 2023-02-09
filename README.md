@@ -3,7 +3,7 @@ pyOneNote is a lightweight python library to read OneNote files. The main goal o
 
 # How to Run
 ```
-python main.py onenote_file_path [output_dir] [extension]
+usage: main.py [-h] -f FILE [-o OUTPUT_DIR] [-e EXTENSION]
 
 ```
 

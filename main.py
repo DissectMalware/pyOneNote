@@ -3,7 +3,7 @@ import FileNode
 import sys
 import os
 import logging
-from typing import BinaryIO
+import argparse
 
 log = logging.getLogger()
 
@@ -20,7 +20,6 @@ def traverse_nodes(root_file_node_list, nodes, filters):
 
 def print_all_properties(root_file_node_list):
     nodes = []
-    count = 0
     filters = ['ObjectDeclaration2RefCountFND']
 
     traverse_nodes(root_file_node_list, nodes, filters)
@@ -101,23 +100,17 @@ def process_onenote_file(file, output_dir, extension):
 
 if __name__ == "__main__":
 
-    if len(sys.argv) < 2:
-        exit()
+    p = argparse.ArgumentParser()
+    p.add_argument("-f", "--file", action="store", help="File to analyze", required=True)
+    p.add_argument("-o", "--output-dir", action="store", default="./", help="Path where store extracted files")
+    p.add_argument("-e", "--extension", action="store", default="", help="Append this extension to extracted file(s)")
 
-    output_dir = "./"
+    args = p.parse_args()
 
-    if len(sys.argv) == 3:
-        output_dir = sys.argv[2]
+    if not os.path.exists(args.file):
+        sys.exit("File: %s doesn't exist", args.file)
 
-    extension = ""
-    if len(sys.argv) == 4:
-        extension = sys.argv[3]
+    with open(args.file, "rb") as file:
+        process_onenote_file(file, args.output_dir, args.extension)
 
-    if not os.path.exists(sys.argv[1]):
-        log.error("File %s doesn't exist", sys.argv[1])
-        exit()
-
-    with open(sys.argv[1], "rb") as file:
-
-        process_onenote_file(file, output_dir, extension)
 

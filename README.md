@@ -6,7 +6,7 @@ pyOneNote is a lightweight python library to read OneNote files. The main goal o
 Installing the latest development
 
 ```
-pip install -U https://github.com/DissectMalware/XLMMacroDeobfuscator/archive/master.zip --force
+pip install -U https://github.com/DissectMalware/pyOneNote/archive/master.zip --force
 ```
 # Running the parser
 

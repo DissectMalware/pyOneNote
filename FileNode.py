@@ -3,6 +3,7 @@ import struct
 
 DEBUG = False
 
+
 class FileNodeListHeader:
     def __init__(self, file):
         self.uintMagic, self.FileNodeListID, self.nFragmentSequence = struct.unpack('<8sII', file.read(16))
@@ -149,6 +150,8 @@ class FileNode:
             self.data = ObjectDeclarationFileData3RefCountFND(file)
         elif self.file_node_header.file_node_type == "RevisionRoleDeclarationFND":
             self.data = RevisionRoleDeclarationFND(file)
+        elif self.file_node_header.file_node_type == "RevisionRoleAndContextDeclarationFND":
+            self.data = RevisionRoleAndContextDeclarationFND(file)
         elif self.file_node_header.file_node_type == "RevisionManifestStart7FND":
             self.data = RevisionManifestStart7FND(file)
         elif self.file_node_header.file_node_type in ["RevisionManifestEndFND", "ObjectGroupEndFND"]:
@@ -402,6 +405,12 @@ class RevisionRoleDeclarationFND:
     def __init__(self, file):
         self.rid = ExtendedGUID(file)
         self.RevisionRole, = struct.unpack('<I', file.read(4))
+
+
+class RevisionRoleAndContextDeclarationFND:
+    def __init__(self, file):
+        self.base = RevisionRoleDeclarationFND(file)
+        self.gctxid = ExtendedGUID(file)
 
 
 class RevisionManifestStart7FND:

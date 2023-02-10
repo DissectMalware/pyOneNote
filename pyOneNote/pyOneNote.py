@@ -35,7 +35,7 @@ def dump_files(root_file_node_list: FileNodeList, output_dir: str, extension: st
     output_dir: path where to store extracted files
     extension: add extension to extracted filename(s)
     """
-    result = {}
+    results = []
 
     nodes = []
     if not json_output and not os.path.exists(output_dir):
@@ -73,6 +73,7 @@ def dump_files(root_file_node_list: FileNodeList, output_dir: str, extension: st
             "content_len": file_content_len,
             "content_hex": file_content_hex
         }
+        results.append(result)
         if not json_output:
             print(
                 "{}, {}, {},\t\t{}".format(
@@ -84,7 +85,7 @@ def dump_files(root_file_node_list: FileNodeList, output_dir: str, extension: st
             ) as output_file:
                 output_file.write(files[file_guid]["content"])
             counter += 1
-    return result
+    return results
 
 
 def check_valid(file):
@@ -105,8 +106,8 @@ def process_onenote_file(file, output_dir, extension, json_output):
     header = Header(file)
     root_file_node_list = FileNodeList(file, header.fcrFileNodeListRoot)
     # print_all_properties(root_file_node_list)
-    json_result = dump_files(root_file_node_list, output_dir, extension, json_output)
-    return json_result
+    results = dump_files(root_file_node_list, output_dir, extension, json_output)
+    return {"files": [results]}
 
 
 def main():

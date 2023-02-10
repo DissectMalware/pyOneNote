@@ -38,7 +38,7 @@ def dump_files(root_file_node_list: FileNodeList, output_dir: str, extension: st
     result = {}
 
     nodes = []
-    if not os.path.exists(output_dir):
+    if not json_output and not os.path.exists(output_dir):
         os.mkdir(output_dir)
 
     filters = ["FileDataStoreObjectReferenceFND", "ObjectDeclarationFileData3RefCountFND"]

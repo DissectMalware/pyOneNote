@@ -1,6 +1,6 @@
 import struct
 import uuid
-import FileNode
+from pyOneNote.FileNode import *
 
 
 class Header:
@@ -96,14 +96,14 @@ class Header:
         self.guidFileVersion = uuid.UUID(bytes_le=self.guidFileVersion )
         self.guidDenyReadFileVersion = uuid.UUID(bytes_le=self.guidDenyReadFileVersion)
 
-        self.fcrHashedChunkList = FileNode.FileChunkReference64x32(self.fcrHashedChunkList)
-        self.fcrTransactionLog = FileNode.FileChunkReference64x32(self.fcrTransactionLog)
-        self.fcrFileNodeListRoot = FileNode.FileChunkReference64x32(self.fcrFileNodeListRoot)
-        self.fcrFreeChunkList = FileNode.FileChunkReference64x32(self.fcrFreeChunkList)
-        self.fcrDebugLog = FileNode.FileChunkReference64x32(self.fcrDebugLog)
-        self.fcrAllocVerificationFreeChunkList = FileNode.FileChunkReference64x32(
+        self.fcrHashedChunkList = FileChunkReference64x32(self.fcrHashedChunkList)
+        self.fcrTransactionLog = FileChunkReference64x32(self.fcrTransactionLog)
+        self.fcrFileNodeListRoot = FileChunkReference64x32(self.fcrFileNodeListRoot)
+        self.fcrFreeChunkList = FileChunkReference64x32(self.fcrFreeChunkList)
+        self.fcrDebugLog = FileChunkReference64x32(self.fcrDebugLog)
+        self.fcrAllocVerificationFreeChunkList = FileChunkReference64x32(
             self.fcrAllocVerificationFreeChunkList)
 
-        self.fcrLegacyFreeChunkList = FileNode.FileChunkReference32(self.fcrLegacyFreeChunkList)
-        self.fcrLegacyTransactionLog = FileNode.FileChunkReference32(self.fcrLegacyTransactionLog)
-        self.fcrLegacyFileNodeListRoot = FileNode.FileChunkReference32(self.fcrLegacyFileNodeListRoot)
+        self.fcrLegacyFreeChunkList = FileChunkReference32(self.fcrLegacyFreeChunkList)
+        self.fcrLegacyTransactionLog = FileChunkReference32(self.fcrLegacyTransactionLog)
+        self.fcrLegacyFileNodeListRoot = FileChunkReference32(self.fcrLegacyFileNodeListRoot)

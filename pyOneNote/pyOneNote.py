@@ -1,5 +1,5 @@
-import Header
-import FileNode
+from pyOneNote.Header import *
+from pyOneNote.FileNode import *
 import sys
 import os
 import logging
@@ -29,7 +29,7 @@ def print_all_properties(root_file_node_list):
             print(node.propertySet.body)
 
 
-def dump_files(root_file_node_list:FileNode.FileNodeList, output_dir: str, extension: str = ""):
+def dump_files(root_file_node_list: FileNodeList, output_dir: str, extension: str = ""):
     """
     file: open(x, "rb")
     output_dir: path where to store extracted files
@@ -46,11 +46,11 @@ def dump_files(root_file_node_list:FileNode.FileNodeList, output_dir: str, exten
     files = {}
     for node in nodes:
         if hasattr(node, "data") and node.data:
-            if isinstance(node.data, FileNode.FileDataStoreObjectReferenceFND):
+            if isinstance(node.data, FileDataStoreObjectReferenceFND):
                 if not str(node.data.guidReference) in files:
                     files[str(node.data.guidReference)] = {"extension": "", "content": ""}
                 files[str(node.data.guidReference)]["content"] = node.data.fileDataStoreObject.FileData
-            elif isinstance(node.data, FileNode.ObjectDeclarationFileData3RefCountFND):
+            elif isinstance(node.data, ObjectDeclarationFileData3RefCountFND):
                 guid = node.data.FileDataReference.StringData.replace("<ifndf>{", "").replace("}", "")
                 guid = guid.lower()
                 if not guid in files:
@@ -91,15 +91,13 @@ def process_onenote_file(file, output_dir, extension):
         exit()
 
     file.seek(0)
-    header = Header.Header(file)
-    root_file_node_list = FileNode.FileNodeList(file, header.fcrFileNodeListRoot)
+    header = Header(file)
+    root_file_node_list = FileNodeList(file, header.fcrFileNodeListRoot)
     # print_all_properties(root_file_node_list)
     dump_files(root_file_node_list, output_dir, extension)
 
 
-
-if __name__ == "__main__":
-
+def main():
     p = argparse.ArgumentParser()
     p.add_argument("-f", "--file", action="store", help="File to analyze", required=True)
     p.add_argument("-o", "--output-dir", action="store", default="./", help="Path where store extracted files")
@@ -112,5 +110,9 @@ if __name__ == "__main__":
 
     with open(args.file, "rb") as file:
         process_onenote_file(file, args.output_dir, args.extension)
+        
+
+if __name__ == "__main__":
+    main()
 
 

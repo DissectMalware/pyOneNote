@@ -107,7 +107,7 @@ def process_onenote_file(file, output_dir, extension, json_output):
     root_file_node_list = FileNodeList(file, header.fcrFileNodeListRoot)
     # print_all_properties(root_file_node_list)
     results = dump_files(root_file_node_list, output_dir, extension, json_output)
-    return {"files": [results]}
+    return {"files": results}
 
 
 def main():

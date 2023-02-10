@@ -12,21 +12,21 @@ pip install -U https://github.com/DissectMalware/pyOneNote/archive/master.zip --
 
 To dump all embedded file in current directory
 ```
-pyOneNote -f example.one 
+pyonenote -f example.one 
 ```
 
 To dump all embedded file in example.one into output_dir
 ```
-pyOneNote -f example.one -o output_dir 
+pyonenote -f example.one -o output_dir 
 ```
 To dump all embedded file in example.one into output_dir and add .bin to the end of each filename
 ```
-pyOneNote -f example.one -o output_dir -e bin
+pyonenote -f example.one -o output_dir -e bin
 ```
 
 # Command Line
 ```
-usage: main.py [-h] -f FILE [-o OUTPUT_DIR] [-e EXTENSION]
+usage: pyonenote [-h] -f FILE [-o OUTPUT_DIR] [-e EXTENSION]
 ```
 
 Note: pyOneNote is under active development

@@ -117,6 +117,8 @@ class FileNode:
             self.data = RevisionManifestListReferenceFND(file, self.file_node_header)
         elif self.file_node_header.file_node_type == "RevisionManifestListStartFND":
             self.data = RevisionManifestListStartFND(file)
+        elif self.file_node_header.file_node_type == "RevisionManifestStart4FND":
+            self.data = RevisionManifestStart4FND(file)
         elif self.file_node_header.file_node_type == "RevisionManifestStart6FND":
             self.data = RevisionManifestStart6FND(file)
         elif self.file_node_header.file_node_type == "ObjectGroupListReferenceFND":
@@ -132,6 +134,8 @@ class FileNode:
                 file.seek(self.data.ref.stp)
                 self.propertySet = ObjectSpaceObjectPropSet(file)
             file.seek(current_offset)
+        elif self.file_node_header.file_node_type == "ReadOnlyObjectDeclaration2LargeRefCountFND":
+            self.data = ReadOnlyObjectDeclaration2LargeRefCountFND(file, self.file_node_header)
         elif self.file_node_header.file_node_type == "ReadOnlyObjectDeclaration2RefCountFND":
             self.data = ReadOnlyObjectDeclaration2RefCountFND(file, self.file_node_header)
         elif self.file_node_header.file_node_type == "FileDataStoreListReferenceFND":
@@ -142,6 +146,8 @@ class FileNode:
             self.data = ObjectDeclaration2Body(file)
         elif self.file_node_header.file_node_type == "ObjectInfoDependencyOverridesFND":
             self.data = ObjectInfoDependencyOverridesFND(file, self.file_node_header)
+        elif self.file_node_header.file_node_type == "RootObjectReference2FNDX":
+            self.data = RootObjectReference2FNDX(file)
         elif self.file_node_header.file_node_type == "RootObjectReference3FND":
             self.data = RootObjectReference3FND(file)
         elif self.file_node_header.file_node_type == "ObjectSpaceManifestRootFND":
@@ -282,6 +288,13 @@ class RevisionManifestListStartFND:
         self.nInstance = file.read(4)
 
 
+class RevisionManifestStart4FND:
+    def __init__(self, file):
+        self.rid = ExtendedGUID(file)
+        self.ridDependent = ExtendedGUID(file)
+        self.timeCreation, self.RevisionRole, self.odcsDefault = struct.unpack('<8sIH', file.read(14))
+
+
 class RevisionManifestStart6FND:
     def __init__(self, file):
         self.rid = ExtendedGUID(file)
@@ -306,11 +319,24 @@ class DataSignatureGroupDefinitionFND:
         self.DataSignatureGroup = ExtendedGUID(file)
 
 
+class ObjectDeclaration2LargeRefCountFND:
+    def __init__(self, file, file_node_header):
+        self.ref = FileNodeChunkReference(file, file_node_header.stpFormat, file_node_header.cbFormat)
+        self.body = ObjectDeclaration2Body(file)
+        self.cRef, = struct.unpack('<I', file.read(4))
+
+
 class ObjectDeclaration2RefCountFND:
     def __init__(self, file, file_node_header):
         self.ref = FileNodeChunkReference(file, file_node_header.stpFormat, file_node_header.cbFormat)
         self.body = ObjectDeclaration2Body(file)
         self.cRef, = struct.unpack('<B', file.read(1))
+
+
+class ReadOnlyObjectDeclaration2LargeRefCountFND:
+    def __init__(self, file, file_node_header):
+        self.base = ObjectDeclaration2LargeRefCountFND(file, file_node_header)
+        self.md5Hash, = struct.unpack('16s', file.read(16))
 
 
 class ReadOnlyObjectDeclaration2RefCountFND:
@@ -377,6 +403,12 @@ class ObjectInfoDependencyOverride32:
     def __init__(self, file):
         self.oid = CompactID(file)
         self.cRef, = struct.unpack('<I', file.read(4))
+
+
+class RootObjectReference2FNDX:
+    def __init__(self, file):
+        self.oidRoot = CompactID(file)
+        self.RootRole, = struct.unpack('<I', file.read(4))
 
 
 class RootObjectReference3FND:

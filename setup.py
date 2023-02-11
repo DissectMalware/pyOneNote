@@ -13,7 +13,7 @@ with open(os.path.join(project_dir, 'README.md')) as f:
 
 entry_points = {
     'console_scripts': [
-        'pyonenote=pyOneNote.pyOneNote:main',
+        'pyonenote=pyOneNote.Main:main',
     ],
 }
 

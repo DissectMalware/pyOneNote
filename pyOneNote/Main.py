@@ -29,15 +29,16 @@ def print_all_properties(root_file_node_list):
             print(node.propertySet.body)
 
 
-def dump_files(root_file_node_list: FileNodeList, output_dir: str, extension: str = ""):
+def dump_files(root_file_node_list: FileNodeList, output_dir: str, extension: str = "", json_output: bool = False):
     """
     file: open(x, "rb")
     output_dir: path where to store extracted files
     extension: add extension to extracted filename(s)
     """
+    results = []
 
     nodes = []
-    if not os.path.exists(output_dir):
+    if not json_output and not os.path.exists(output_dir):
         os.mkdir(output_dir)
 
     filters = ["FileDataStoreObjectReferenceFND", "ObjectDeclarationFileData3RefCountFND"]
@@ -63,17 +64,28 @@ def dump_files(root_file_node_list: FileNodeList, output_dir: str, extension: st
         extension = "." + extension
 
     for file_guid in files:
-        print(
-            "{}, {}, {},\t\t{}".format(
-                file_guid, files[file_guid]["extension"], len(files[file_guid]["content"]), files[file_guid]["content"][:128].hex()
+        file_extension = files[file_guid]["extension"]
+        file_content_len = len(files[file_guid]["content"])
+        file_content_hex = files[file_guid]["content"][:128].hex()
+        result = {
+            "guid": file_guid,
+            "extension": file_extension,
+            "content_len": file_content_len,
+            "content_hex": file_content_hex
+        }
+        results.append(result)
+        if not json_output:
+            print(
+                "{}, {}, {},\t\t{}".format(
+                    file_guid, file_extension, file_content_len, file_content_hex
+                )
             )
-        )
-
-        with open(
-            os.path.join(output_dir, "file_{}{}{}".format(counter, files[file_guid]["extension"], extension)), "wb"
-        ) as output_file:
-            output_file.write(files[file_guid]["content"])
-        counter += 1
+            with open(
+                os.path.join(output_dir, "file_{}{}{}".format(counter, files[file_guid]["extension"], extension)), "wb"
+            ) as output_file:
+                output_file.write(files[file_guid]["content"])
+            counter += 1
+    return results
 
 
 def check_valid(file):
@@ -85,7 +97,7 @@ def check_valid(file):
     return False
 
 
-def process_onenote_file(file, output_dir, extension):
+def process_onenote_file(file, output_dir, extension, json_output):
     if not check_valid(file):
         log.error("please provide valid One file")
         exit()
@@ -94,7 +106,8 @@ def process_onenote_file(file, output_dir, extension):
     header = Header(file)
     root_file_node_list = FileNodeList(file, header.fcrFileNodeListRoot)
     # print_all_properties(root_file_node_list)
-    dump_files(root_file_node_list, output_dir, extension)
+    results = dump_files(root_file_node_list, output_dir, extension, json_output)
+    return {"files": results}
 
 
 def main():
@@ -102,6 +115,7 @@ def main():
     p.add_argument("-f", "--file", action="store", help="File to analyze", required=True)
     p.add_argument("-o", "--output-dir", action="store", default="./", help="Path where store extracted files")
     p.add_argument("-e", "--extension", action="store", default="", help="Append this extension to extracted file(s)")
+    p.add_argument("-j", "--json", action="store_true", default=False, help="Generate JSON output only, no dumps or prints")
 
     args = p.parse_args()
 
@@ -109,7 +123,7 @@ def main():
         sys.exit("File: %s doesn't exist", args.file)
 
     with open(args.file, "rb") as file:
-        process_onenote_file(file, args.output_dir, args.extension)
+        process_onenote_file(file, args.output_dir, args.extension, args.json)
         
 
 if __name__ == "__main__":

@@ -1,5 +1,6 @@
 import struct
 import uuid
+import json
 from pyOneNote.FileNode import *
 
 
@@ -107,3 +108,18 @@ class Header:
         self.fcrLegacyFreeChunkList = FileChunkReference32(self.fcrLegacyFreeChunkList)
         self.fcrLegacyTransactionLog = FileChunkReference32(self.fcrLegacyTransactionLog)
         self.fcrLegacyFileNodeListRoot = FileChunkReference32(self.fcrLegacyFileNodeListRoot)
+
+
+    def convert_to_dictionary(self):
+        res = {}
+        for key, item in self.__dict__.items():
+            if not key.startswith('_') and not key == 'rgbReserved':
+                if isinstance(item, uuid.UUID):
+                    res[key] = str(item)
+                elif isinstance(item, FileChunkReference64x32) or \
+                    isinstance(item, FileChunkReference32) or \
+                    isinstance(item, FileNodeChunkReference):
+                    res[key] = str(item)
+                else:
+                    res[key] = item
+        return res

@@ -1,6 +1,7 @@
 import uuid
 import struct
 from datetime import datetime, timedelta
+import locale
 
 DEBUG = False
 
@@ -584,6 +585,7 @@ class PropertySet:
         self.cProperties, = struct.unpack('<H', file.read(2))
         self.rgPrids = []
         self.indent = ''
+        self._formated_properties = None
         for i in range(self.cProperties):
             self.rgPrids.append(PropertyID(file))
 
@@ -633,8 +635,12 @@ class PropertySet:
             data.append(stream_of_context_ids.read())
         return data
 
-    def __str__(self):
-        result = ''
+
+    def get_properties(self):
+        if self._formated_properties is not None :
+            return self._formated_properties
+
+        self._formated_properties = {}
         for i in range(self.cProperties):
             propertyName = str(self.rgPrids[i])
             if propertyName != 'Unknown':
@@ -648,21 +654,36 @@ class PropertySet:
                         except:
                             propertyVal = self.rgData[i].Data.hex()
                 else:
-                    if 'time' in propertyName.lower():
+                    property_name_lower =  propertyName.lower()
+                    if 'time' in property_name_lower:
                         if len(self.rgData[i]) == 8:
                             timestamp_in_nano, = struct.unpack('<Q', self.rgData[i])
                             propertyVal = PropertySet.parse_filetime(timestamp_in_nano)
                         else:
                             timestamp_in_sec, = struct.unpack('<I', self.rgData[i])
                             propertyVal = PropertySet.time32_to_datetime(timestamp_in_sec)
-                    elif 'height' in propertyName.lower() or \
-                            'width' in propertyName.lower() or \
-                            'offset' in propertyName.lower():
+                    elif 'height' in property_name_lower or \
+                            'width' in property_name_lower or \
+                            'offset' in property_name_lower or \
+                            'margin' in property_name_lower:
                         size, = struct.unpack('<f', self.rgData[i])
                         propertyVal = PropertySet.half_inch_size_to_pixels(size)
+                    elif 'langid' in property_name_lower:
+                        lcid, =struct.unpack('<H', self.rgData[i])
+                        propertyVal = '{}({})'.format(PropertySet.lcid_to_string(lcid), lcid)
+                    elif 'languageid' in property_name_lower:
+                        lcid, =struct.unpack('<I', self.rgData[i])
+                        propertyVal = '{}({})'.format(PropertySet.lcid_to_string(lcid), lcid)
                     else:
                         propertyVal = str(self.rgData[i])
-                result += '{}{}: {}\n'.format(self.indent, propertyName, propertyVal)
+                self._formated_properties[propertyName] = str(propertyVal)
+        return self._formated_properties
+
+
+    def __str__(self):
+        result = ''
+        for propertyName, propertyVal in self.get_properties().items():
+            result += '{}{}: {}\n'.format(self.indent, propertyName, propertyVal)
         return result
 
     [staticmethod]
@@ -707,6 +728,10 @@ class PropertySet:
         dt = datetime(1970, 1, 1) + timedelta(seconds=seconds_since_epoch)
 
         return dt
+
+    [staticmethod]
+    def lcid_to_string(lcid):
+        return locale.windows_locale.get(lcid, 'Unknown LCID')
 
 
 class PrtFourBytesOfLengthFollowedByData:

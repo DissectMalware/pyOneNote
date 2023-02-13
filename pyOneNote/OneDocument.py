@@ -27,15 +27,13 @@ class OneDocment:
         nodes = []
         filters = ['ObjectDeclaration2RefCountFND']
 
-        self._properties = {}
+        self._properties = []
 
         OneDocment.traverse_nodes(self.root_file_node_list, nodes, filters)
         for node in nodes:
             if hasattr(node, 'propertySet'):
-                if not str(node.data.body.jcid) in self._properties:
-                    self._properties[str(node.data.body.jcid)] = []
                 node.propertySet.body.indent= '\t\t'
-                self._properties[str(node.data.body.jcid)].append(str(node.propertySet.body))
+                self._properties.append({'type': str(node.data.body.jcid), 'val':node.propertySet.body.get_properties()})
 
         return  self._properties
 

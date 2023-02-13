@@ -1,92 +1,13 @@
 from pyOneNote.Header import *
 from pyOneNote.FileNode import *
+from pyOneNote.OneDocument import *
+import math
 import sys
 import os
 import logging
 import argparse
 
 log = logging.getLogger()
-
-
-def traverse_nodes(root_file_node_list, nodes, filters):
-    for fragment in root_file_node_list.fragments:
-        for file_node in fragment.fileNodes:
-            if len(filters) == 0 or hasattr(file_node, "data") and type(file_node.data).__name__ in filters:
-                nodes.append(file_node)
-
-            for child_file_node_list in file_node.children:
-                traverse_nodes(child_file_node_list, nodes, filters)
-
-
-def print_all_properties(root_file_node_list):
-    nodes = []
-    filters = ['ObjectDeclaration2RefCountFND']
-
-    traverse_nodes(root_file_node_list, nodes, filters)
-    for node in nodes:
-        if hasattr(node, 'propertySet'):
-            print(str(node.data.body.jcid))
-            print(node.propertySet.body)
-
-
-def dump_files(root_file_node_list: FileNodeList, output_dir: str, extension: str = "", json_output: bool = False):
-    """
-    file: open(x, "rb")
-    output_dir: path where to store extracted files
-    extension: add extension to extracted filename(s)
-    """
-    results = []
-
-    nodes = []
-    if not json_output and not os.path.exists(output_dir):
-        os.mkdir(output_dir)
-
-    filters = ["FileDataStoreObjectReferenceFND", "ObjectDeclarationFileData3RefCountFND"]
-
-    traverse_nodes(root_file_node_list, nodes, filters)
-    files = {}
-    for node in nodes:
-        if hasattr(node, "data") and node.data:
-            if isinstance(node.data, FileDataStoreObjectReferenceFND):
-                if not str(node.data.guidReference) in files:
-                    files[str(node.data.guidReference)] = {"extension": "", "content": ""}
-                files[str(node.data.guidReference)]["content"] = node.data.fileDataStoreObject.FileData
-            elif isinstance(node.data, ObjectDeclarationFileData3RefCountFND):
-                guid = node.data.FileDataReference.StringData.replace("<ifndf>{", "").replace("}", "")
-                guid = guid.lower()
-                if not guid in files:
-                    files[guid] = {"extension": "", "content": ""}
-                files[guid]["extension"] = node.data.Extension.StringData
-
-    counter = 0
-
-    if extension and not extension.startswith("."):
-        extension = "." + extension
-
-    for file_guid in files:
-        file_extension = files[file_guid]["extension"]
-        file_content_len = len(files[file_guid]["content"])
-        file_content_hex = files[file_guid]["content"][:128].hex()
-        result = {
-            "guid": file_guid,
-            "extension": file_extension,
-            "content_len": file_content_len,
-            "content_hex": file_content_hex
-        }
-        results.append(result)
-        if not json_output:
-            print(
-                "{}, {}, {},\t\t{}".format(
-                    file_guid, file_extension, file_content_len, file_content_hex
-                )
-            )
-            with open(
-                os.path.join(output_dir, "file_{}{}{}".format(counter, files[file_guid]["extension"], extension)), "wb"
-            ) as output_file:
-                output_file.write(files[file_guid]["content"])
-            counter += 1
-    return results
-
 
 def check_valid(file):
     if file.read(16) in (
@@ -103,11 +24,51 @@ def process_onenote_file(file, output_dir, extension, json_output):
         exit()
 
     file.seek(0)
-    header = Header(file)
-    root_file_node_list = FileNodeList(file, header.fcrFileNodeListRoot)
-    # print_all_properties(root_file_node_list)
-    results = dump_files(root_file_node_list, output_dir, extension, json_output)
-    return {"files": results}
+    document = OneDocment(file)
+    data = document.get_json()
+    if not json_output:
+        print('Headers\n####################################################################')
+        indent = '\t'
+        for key, header in data['headers'].items():
+            print('{}{}: {}'.format(indent, key, header))
+
+        print('\n\nProperties\n####################################################################')
+        indent = '\t'
+        for propertySet in data['properties']:
+            print('{}{}:'.format(indent, propertySet['type']))
+            for property_name, property_val in propertySet['val'].items():
+                print('{}{}: {}'.format(indent+'\t', property_name, str(property_val)))
+            print("")
+
+        print('\n\nEmbedded Files\n####################################################################')
+        indent = '\t'
+        for name, file in data['files'].items():
+            print('{}{}:'.format(indent, name))
+            print('\t{}Extension: {}'.format(indent, file['extension']))
+            print('{}'.format( get_hex_format(file['content'][:256], 16, indent+'\t')))
+
+        if extension and not extension.startswith("."):
+            extension = "." + extension
+
+        counter = 0
+        for file_guid, file in document.get_files().items():
+            with open(
+                    os.path.join(output_dir,
+                                 "file_{}{}{}".format(counter, file["extension"], extension)), "wb"
+            ) as output_file:
+                output_file.write(file["content"])
+            counter += 1
+
+    return json.dumps(document.get_json())
+
+
+def get_hex_format(hex_str, col, indent):
+    res = ''
+    chars = (col*2)
+    for i in range(math.ceil( len(hex_str)/chars)):
+        segment = hex_str[i*chars: (i+1)*chars]
+        res += indent + ' '.join([segment[i:i+2] for i in range(0, len(segment), 2)]) +'\n'
+    return res
 
 
 def main():

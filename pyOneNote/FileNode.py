@@ -1,5 +1,7 @@
 import uuid
 import struct
+from datetime import datetime, timedelta
+import locale
 
 DEBUG = False
 
@@ -582,6 +584,8 @@ class PropertySet:
         self.current = file.tell()
         self.cProperties, = struct.unpack('<H', file.read(2))
         self.rgPrids = []
+        self.indent = ''
+        self._formated_properties = None
         for i in range(self.cProperties):
             self.rgPrids.append(PropertyID(file))
 
@@ -593,13 +597,13 @@ class PropertySet:
             elif type == 0x2:
                 self.rgData.append(self.rgPrids[i].boolValue)
             elif type == 0x3:
-                self.rgData.append(struct.unpack('<B', file.read(1))[0])
+                self.rgData.append(struct.unpack('c', file.read(1))[0])
             elif type == 0x4:
-                self.rgData.append(struct.unpack('<H', file.read(2))[0])
+                self.rgData.append(struct.unpack('2s', file.read(2))[0])
             elif type == 0x5:
-                self.rgData.append(struct.unpack('<I', file.read(4))[0])
+                self.rgData.append(struct.unpack('4s', file.read(4))[0])
             elif type == 0x6:
-                self.rgData.append(struct.unpack('<Q', file.read(8))[0])
+                self.rgData.append(struct.unpack('8s', file.read(8))[0])
             elif type == 0x7:
                 self.rgData.append(PrtFourBytesOfLengthFollowedByData(file, self))
             elif type == 0x8 or type == 0x09:
@@ -631,8 +635,12 @@ class PropertySet:
             data.append(stream_of_context_ids.read())
         return data
 
-    def __str__(self):
-        result = ''
+
+    def get_properties(self):
+        if self._formated_properties is not None :
+            return self._formated_properties
+
+        self._formated_properties = {}
         for i in range(self.cProperties):
             propertyName = str(self.rgPrids[i])
             if propertyName != 'Unknown':
@@ -646,9 +654,84 @@ class PropertySet:
                         except:
                             propertyVal = self.rgData[i].Data.hex()
                 else:
-                    propertyVal = str(self.rgData[i])
-                result += '{}: {}\n'.format(propertyName, propertyVal)
+                    property_name_lower =  propertyName.lower()
+                    if 'time' in property_name_lower:
+                        if len(self.rgData[i]) == 8:
+                            timestamp_in_nano, = struct.unpack('<Q', self.rgData[i])
+                            propertyVal = PropertySet.parse_filetime(timestamp_in_nano)
+                        else:
+                            timestamp_in_sec, = struct.unpack('<I', self.rgData[i])
+                            propertyVal = PropertySet.time32_to_datetime(timestamp_in_sec)
+                    elif 'height' in property_name_lower or \
+                            'width' in property_name_lower or \
+                            'offset' in property_name_lower or \
+                            'margin' in property_name_lower:
+                        size, = struct.unpack('<f', self.rgData[i])
+                        propertyVal = PropertySet.half_inch_size_to_pixels(size)
+                    elif 'langid' in property_name_lower:
+                        lcid, =struct.unpack('<H', self.rgData[i])
+                        propertyVal = '{}({})'.format(PropertySet.lcid_to_string(lcid), lcid)
+                    elif 'languageid' in property_name_lower:
+                        lcid, =struct.unpack('<I', self.rgData[i])
+                        propertyVal = '{}({})'.format(PropertySet.lcid_to_string(lcid), lcid)
+                    else:
+                        propertyVal = str(self.rgData[i])
+                self._formated_properties[propertyName] = str(propertyVal)
+        return self._formated_properties
+
+
+    def __str__(self):
+        result = ''
+        for propertyName, propertyVal in self.get_properties().items():
+            result += '{}{}: {}\n'.format(self.indent, propertyName, propertyVal)
         return result
+
+    [staticmethod]
+    def half_inch_size_to_pixels(picture_width, dpi=96):
+        # Number of pixels per half-inch
+        pixels_per_half_inch = dpi / 2
+
+        # Calculate the number of pixels
+        pixels = picture_width * pixels_per_half_inch
+
+        return int(pixels)
+
+    [staticmethod]
+    def time32_to_datetime(time32):
+        # Define the starting time (12:00 A.M., January 1, 1980, UTC)
+        start = datetime(1980, 1, 1, 0, 0, 0)
+
+        # Calculate the number of seconds represented by the Time32 value
+        seconds = time32
+
+        # Calculate the final datetime by adding the number of seconds to the starting time
+        dt = start + timedelta(seconds=seconds)
+
+        return dt
+
+
+    [staticmethod]
+    def parse_filetime(filetime):
+        # Define the number of 100-nanosecond intervals in 1 second
+        intervals_per_second = 10 ** 7
+
+        # Define the number of seconds between January 1, 1601 and January 1, 1970
+        seconds_between_epochs = 11644473600
+
+        # Calculate the number of seconds represented by the FILETIME value
+        seconds = filetime / intervals_per_second
+
+        # Calculate the number of seconds that have elapsed since January 1, 1970
+        seconds_since_epoch = seconds - seconds_between_epochs
+
+        # Convert the number of seconds to a datetime object
+        dt = datetime(1970, 1, 1) + timedelta(seconds=seconds_since_epoch)
+
+        return dt
+
+    [staticmethod]
+    def lcid_to_string(lcid):
+        return locale.windows_locale.get(lcid, 'Unknown LCID')
 
 
 class PrtFourBytesOfLengthFollowedByData:

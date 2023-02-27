@@ -58,8 +58,8 @@ def process_onenote_file(file, output_dir, extension, json_output):
             ) as output_file:
                 output_file.write(file["content"])
             counter += 1
-
-    return json.dumps(document.get_json())
+    else:
+        print(json.dumps(data))
 
 
 def get_hex_format(hex_str, col, indent):

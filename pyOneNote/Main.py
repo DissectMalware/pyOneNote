@@ -24,7 +24,7 @@ def process_onenote_file(file, output_dir, extension, json_output):
         exit()
 
     file.seek(0)
-    document = OneDocment(file)
+    document = OneDocument(file)
     data = document.get_json()
     if not json_output:
         print('Headers\n####################################################################')
@@ -58,8 +58,8 @@ def process_onenote_file(file, output_dir, extension, json_output):
             ) as output_file:
                 output_file.write(file["content"])
             counter += 1
-
-    return json.dumps(document.get_json())
+    else:
+        print(json.dumps(data))
 
 
 def get_hex_format(hex_str, col, indent):
@@ -81,7 +81,7 @@ def main():
     args = p.parse_args()
 
     if not os.path.exists(args.file):
-        sys.exit("File: %s doesn't exist", args.file)
+        sys.exit("File: '{}' doesn't exist".format(args.file))
 
     with open(args.file, "rb") as file:
         process_onenote_file(file, args.output_dir, args.extension, args.json)

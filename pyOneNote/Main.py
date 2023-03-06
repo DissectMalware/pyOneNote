@@ -81,7 +81,7 @@ def main():
     args = p.parse_args()
 
     if not os.path.exists(args.file):
-        sys.exit("File: %s doesn't exist", args.file)
+        sys.exit("File: '{}' doesn't exist".format(args.file))
 
     with open(args.file, "rb") as file:
         process_onenote_file(file, args.output_dir, args.extension, args.json)

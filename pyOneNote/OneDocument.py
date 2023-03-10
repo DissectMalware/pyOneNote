@@ -50,13 +50,14 @@ class OneDocment:
             if hasattr(node, "data") and node.data:
                 if isinstance(node.data, FileDataStoreObjectReferenceFND):
                     if not str(node.data.guidReference) in self._files:
-                        self._files[str(node.data.guidReference)] = {"extension": "", "content": ""}
+                        self._files[str(node.data.guidReference)] = {"extension": "", "content": "", "offset": 0}
                     self._files[str(node.data.guidReference)]["content"] = node.data.fileDataStoreObject.FileData
+                    self._files[str(node.data.guidReference)]["offset"] = node.data.fileDataStoreObject.FileOffset
                 elif isinstance(node.data, ObjectDeclarationFileData3RefCountFND):
                     guid = node.data.FileDataReference.StringData.replace("<ifndf>{", "").replace("}", "")
                     guid = guid.lower()
                     if not guid in self._files:
-                        self._files[guid] = {"extension": "", "content": ""}
+                        self._files[guid] = {"extension": "", "content": "", "offset": 0}
                     self._files[guid]["extension"] = node.data.Extension.StringData
         return self._files
 
@@ -64,7 +65,8 @@ class OneDocment:
         files_in_hex = {}
         for key, file in self.get_files().items():
             files_in_hex[key] = {'extension': file['extension'],
-                                 'content': file['content'].hex()}
+                                 'content': file['content'].hex(),
+                                 'offset': file['offset']}
 
         res = {
             "headers": self.header.convert_to_dictionary(),

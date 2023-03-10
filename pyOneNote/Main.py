@@ -45,6 +45,7 @@ def process_onenote_file(file, output_dir, extension, json_output):
         for name, file in data['files'].items():
             print('{}{}:'.format(indent, name))
             print('\t{}Extension: {}'.format(indent, file['extension']))
+            print('\t{}At offset: {} ({} bytes)'.format(indent, file['offset'], len(file['content'])))
             print('{}'.format( get_hex_format(file['content'][:256], 16, indent+'\t')))
 
         if extension and not extension.startswith("."):

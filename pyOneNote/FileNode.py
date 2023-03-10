@@ -544,7 +544,9 @@ class StringInStorageBuffer:
 
 class FileDataStoreObject:
     def __init__(self, file, fileNodeChunkReference):
-        self.guidHeader, self.cbLength, self.unused, self.reserved = struct.unpack('<16sQ4s8s', file.read(36))
+        size_of_header = 36
+        self.guidHeader, self.cbLength, self.unused, self.reserved = struct.unpack('<16sQ4s8s', file.read(size_of_header))
+        self.FileOffset = fileNodeChunkReference.stp + size_of_header
         self.FileData, = struct.unpack('{}s'.format(self.cbLength), file.read(self.cbLength))
         file.seek(fileNodeChunkReference.stp + fileNodeChunkReference.cb - 16)
         self.guidFooter, = struct.unpack('16s', file.read(16))

@@ -51,13 +51,14 @@ class OneDocment:
             if hasattr(node, "data") and node.data:
                 if isinstance(node.data, FileDataStoreObjectReferenceFND):
                     if not str(node.data.guidReference) in self._files:
-                        self._files[str(node.data.guidReference)] = {"extension": "", "content": "", "identity": ""}
+                        self._files[str(node.data.guidReference)] = {"extension": "", "content": "", "identity": "", "offset": 0}
                     self._files[str(node.data.guidReference)]["content"] = node.data.fileDataStoreObject.FileData
+                    self._files[str(node.data.guidReference)]["offset"] = node.data.fileDataStoreObject.FileOffset
                 elif isinstance(node.data, ObjectDeclarationFileData3RefCountFND):
                     guid = node.data.FileDataReference.StringData.replace("<ifndf>{", "").replace("}", "")
                     guid = guid.lower()
                     if not guid in self._files:
-                        self._files[guid] = {"extension": "", "content": "", "identity": ""}
+                        self._files[guid] = {"extension": "", "content": "", "identity": "", "offset": 0}
                     self._files[guid]["extension"] = node.data.Extension.StringData
                     self._files[guid]["identity"] = str(node.data.oid)
         return self._files
@@ -71,6 +72,7 @@ class OneDocment:
         for key, file in self.get_files().items():
             files_in_hex[key] = {'extension': file['extension'],
                                  'content': file['content'].hex(),
+                                 'offset': file['offset'],
                                  'identity': file['identity']}
 
         res = {

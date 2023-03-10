@@ -55,6 +55,7 @@ def process_onenote_file(file, output_dir, extension, json_output):
         for name, file in data['files'].items():
             print('{}{} ({}):'.format(indent, name, file['identity']))
             print('\t{}Extension: {}'.format(indent, file['extension']))
+            print('\t{}At offset: {} ({} bytes)'.format(indent, file['offset'], len(file['content'])))
             if(file['identity'] in file_metadata):
                 for property_name, property_val in file_metadata[file['identity']].items():
                     print('{}{}: {}'.format(indent+'\t', property_name, str(property_val)))

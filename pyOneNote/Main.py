@@ -34,8 +34,17 @@ def process_onenote_file(file, output_dir, extension, json_output):
 
         print('\n\nProperties\n####################################################################')
         indent = '\t'
+        file_metadata ={}
         for propertySet in data['properties']:
             print('{}{}({}):'.format(indent, propertySet['type'], propertySet['identity']))
+            if propertySet['type'] == "jcidEmbeddedFileNode":
+                if 'EmbeddedFileContainer' in propertySet['val']:
+                    file_metadata[propertySet['val']['EmbeddedFileContainer'][0]] = propertySet['val']
+            if propertySet['type'] == "jcidImageNode":
+                if 'PictureContainer' in propertySet['val']:
+                    file_metadata[propertySet['val']['PictureContainer'][0]] = propertySet['val']
+
+
             for property_name, property_val in propertySet['val'].items():
                 print('{}{}: {}'.format(indent+'\t', property_name, str(property_val)))
             print("")
@@ -45,6 +54,9 @@ def process_onenote_file(file, output_dir, extension, json_output):
         for name, file in data['files'].items():
             print('{}{} ({}):'.format(indent, name, file['identity']))
             print('\t{}Extension: {}'.format(indent, file['extension']))
+            if(file['identity'] in file_metadata):
+                for property_name, property_val in file_metadata[file['identity']].items():
+                    print('{}{}: {}'.format(indent+'\t', property_name, str(property_val)))
             print('{}'.format( get_hex_format(file['content'][:256], 16, indent+'\t')))
 
         if extension and not extension.startswith("."):
@@ -59,7 +71,7 @@ def process_onenote_file(file, output_dir, extension, json_output):
                 output_file.write(file["content"])
             counter += 1
 
-    return json.dumps(document.get_json())
+    return json.dumps(data)
 
 
 def get_hex_format(hex_str, col, indent):

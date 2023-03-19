@@ -663,7 +663,7 @@ class PropertySet:
                 propertyVal = ''
                 if isinstance(self.rgData[i], PrtFourBytesOfLengthFollowedByData):
                     if 'guid' in propertyName.lower():
-                        propertyVal = uuid.UUID(bytes_le=self.rgData[i].Data)
+                        propertyVal = uuid.UUID(bytes_le=self.rgData[i].Data).hex
                     else:
                         try:
                             propertyVal = self.rgData[i].Data.decode('utf-16')
@@ -674,10 +674,10 @@ class PropertySet:
                     if 'time' in property_name_lower:
                         if len(self.rgData[i]) == 8:
                             timestamp_in_nano, = struct.unpack('<Q', self.rgData[i])
-                            propertyVal = PropertySet.parse_filetime(timestamp_in_nano)
+                            propertyVal = str(PropertySet.parse_filetime(timestamp_in_nano))
                         else:
                             timestamp_in_sec, = struct.unpack('<I', self.rgData[i])
-                            propertyVal = PropertySet.time32_to_datetime(timestamp_in_sec)
+                            propertyVal = str(PropertySet.time32_to_datetime(timestamp_in_sec))
                     elif 'height' in property_name_lower or \
                             'width' in property_name_lower or \
                             'offset' in property_name_lower or \
@@ -691,11 +691,11 @@ class PropertySet:
                         lcid, =struct.unpack('<I', self.rgData[i])
                         propertyVal = '{}({})'.format(PropertySet.lcid_to_string(lcid), lcid)
                     else:
-                        if isinstance(self.rgData[i], CompactID):
-                            propertyVal = '{}:{}'.format(str(self.document._global_identification_table[self.current_revision][self.rgData[i].guidIndex]), str(self.rgData[i].n))
+                        if isinstance(self.rgData[i], list):
+                            propertyVal = [str(i) for i in self.rgData[i]]
                         else:
                             propertyVal = str(self.rgData[i])
-                self._formated_properties[propertyName] = str(propertyVal)
+                self._formated_properties[propertyName] = propertyVal
         return self._formated_properties
 
 

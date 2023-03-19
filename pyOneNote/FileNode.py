@@ -12,7 +12,7 @@ class FileNodeListHeader:
 
 
 class FileNodeList:
-    def __init__(self, file, file_chunk_reference):
+    def __init__(self, file, document, file_chunk_reference):
         file.seek(file_chunk_reference.stp)
         self.end = file_chunk_reference.stp + file_chunk_reference.cb
         self.fragments = []
@@ -20,7 +20,7 @@ class FileNodeList:
         # FileNodeList can contain one or more FileNodeListFragment
         while True:
             section_end = file_chunk_reference.stp + file_chunk_reference.cb
-            fragment = FileNodeListFragment(file, section_end)
+            fragment = FileNodeListFragment(file, document, section_end)
             self.fragments.append(fragment)
             if fragment.nextFragment.isFcrNil():
                 break
@@ -29,13 +29,13 @@ class FileNodeList:
 
 
 class FileNodeListFragment:
-    def __init__(self, file, end):
+    def __init__(self, file, document, end):
         self.fileNodes = []
         self.fileNodeListHeader = FileNodeListHeader(file)
 
         # FileNodeListFragment can have one or more FileNode
         while file.tell() + 24 < end:
-            node = FileNode(file)
+            node = FileNode(file, document)
             self.fileNodes.append(node)
             if node.file_node_header.file_node_id == 255 or node.file_node_header.file_node_id == 0:
                 break
@@ -103,7 +103,8 @@ class FileNodeHeader:
 
 class FileNode:
     count = 0
-    def __init__(self, file):
+    def __init__(self, file, document):
+        self.document= document
         self.file_node_header = FileNodeHeader(file)
         if DEBUG:
             print(str(file.tell()) + ' ' + self.file_node_header.file_node_type + ' ' + str(self.file_node_header.baseType))
@@ -121,47 +122,54 @@ class FileNode:
             self.data = RevisionManifestListStartFND(file)
         elif self.file_node_header.file_node_type == "RevisionManifestStart4FND":
             self.data = RevisionManifestStart4FND(file)
+            self.document.cur_revision = self.data.rid
         elif self.file_node_header.file_node_type == "RevisionManifestStart6FND":
             self.data = RevisionManifestStart6FND(file)
+            self.document.cur_revision = self.data.rid
         elif self.file_node_header.file_node_type == "ObjectGroupListReferenceFND":
             self.data = ObjectGroupListReferenceFND(file, self.file_node_header)
         elif self.file_node_header.file_node_type == "GlobalIdTableEntryFNDX":
             self.data = GlobalIdTableEntryFNDX(file)
+            if not self.document.cur_revision in self.document._global_identification_table:
+                self.document._global_identification_table[self.document.cur_revision] = {}
+
+            self.document._global_identification_table[self.document.cur_revision][self.data.index] = self.data.guid
         elif self.file_node_header.file_node_type == "DataSignatureGroupDefinitionFND":
             self.data = DataSignatureGroupDefinitionFND(file)
         elif self.file_node_header.file_node_type == "ObjectDeclaration2RefCountFND":
-            self.data = ObjectDeclaration2RefCountFND(file, self.file_node_header)
+            self.data = ObjectDeclaration2RefCountFND(file, self.document, self.file_node_header)
             current_offset = file.tell()
             if self.data.body.jcid.IsPropertySet:
                 file.seek(self.data.ref.stp)
-                self.propertySet = ObjectSpaceObjectPropSet(file)
+                self.propertySet = ObjectSpaceObjectPropSet(file, document)
             file.seek(current_offset)
         elif self.file_node_header.file_node_type == "ReadOnlyObjectDeclaration2LargeRefCountFND":
-            self.data = ReadOnlyObjectDeclaration2LargeRefCountFND(file, self.file_node_header)
+            self.data = ReadOnlyObjectDeclaration2LargeRefCountFND(file, self.document, self.file_node_header)
         elif self.file_node_header.file_node_type == "ReadOnlyObjectDeclaration2RefCountFND":
-            self.data = ReadOnlyObjectDeclaration2RefCountFND(file, self.file_node_header)
+            self.data = ReadOnlyObjectDeclaration2RefCountFND(file, self.document, self.file_node_header)
         elif self.file_node_header.file_node_type == "FileDataStoreListReferenceFND":
             self.data = FileDataStoreListReferenceFND(file, self.file_node_header)
         elif self.file_node_header.file_node_type == "FileDataStoreObjectReferenceFND":
             self.data = FileDataStoreObjectReferenceFND(file, self.file_node_header)
         elif self.file_node_header.file_node_type == "ObjectDeclaration2Body":
-            self.data = ObjectDeclaration2Body(file)
+            self.data = ObjectDeclaration2Body(file, self.document)
         elif self.file_node_header.file_node_type == "ObjectInfoDependencyOverridesFND":
-            self.data = ObjectInfoDependencyOverridesFND(file, self.file_node_header)
+            self.data = ObjectInfoDependencyOverridesFND(file, self.file_node_header, self.document)
         elif self.file_node_header.file_node_type == "RootObjectReference2FNDX":
-            self.data = RootObjectReference2FNDX(file)
+            self.data = RootObjectReference2FNDX(file, self.document)
         elif self.file_node_header.file_node_type == "RootObjectReference3FND":
             self.data = RootObjectReference3FND(file)
         elif self.file_node_header.file_node_type == "ObjectSpaceManifestRootFND":
             self.data = ObjectSpaceManifestRootFND(file)
         elif self.file_node_header.file_node_type == "ObjectDeclarationFileData3RefCountFND":
-            self.data = ObjectDeclarationFileData3RefCountFND(file)
+            self.data = ObjectDeclarationFileData3RefCountFND(file, self.document)
         elif self.file_node_header.file_node_type == "RevisionRoleDeclarationFND":
             self.data = RevisionRoleDeclarationFND(file)
         elif self.file_node_header.file_node_type == "RevisionRoleAndContextDeclarationFND":
             self.data = RevisionRoleAndContextDeclarationFND(file)
         elif self.file_node_header.file_node_type == "RevisionManifestStart7FND":
             self.data = RevisionManifestStart7FND(file)
+            self.document.cur_revision = self.data.base.rid
         elif self.file_node_header.file_node_type in ["RevisionManifestEndFND", "ObjectGroupEndFND"]:
             # no data part
             self.data = None
@@ -170,7 +178,7 @@ class FileNode:
 
         current_offset = file.tell()
         if self.file_node_header.baseType == 2:
-            self.children.append(FileNodeList(file, self.data.ref))
+            self.children.append(FileNodeList(file, self.document, self.data.ref))
         file.seek(current_offset)
 
 
@@ -322,34 +330,34 @@ class DataSignatureGroupDefinitionFND:
 
 
 class ObjectDeclaration2LargeRefCountFND:
-    def __init__(self, file, file_node_header):
+    def __init__(self, file, document, file_node_header):
         self.ref = FileNodeChunkReference(file, file_node_header.stpFormat, file_node_header.cbFormat)
-        self.body = ObjectDeclaration2Body(file)
+        self.body = ObjectDeclaration2Body(file, document)
         self.cRef, = struct.unpack('<I', file.read(4))
 
 
 class ObjectDeclaration2RefCountFND:
-    def __init__(self, file, file_node_header):
+    def __init__(self, file, document, file_node_header):
         self.ref = FileNodeChunkReference(file, file_node_header.stpFormat, file_node_header.cbFormat)
-        self.body = ObjectDeclaration2Body(file)
+        self.body = ObjectDeclaration2Body(file, document)
         self.cRef, = struct.unpack('<B', file.read(1))
 
 
 class ReadOnlyObjectDeclaration2LargeRefCountFND:
-    def __init__(self, file, file_node_header):
-        self.base = ObjectDeclaration2LargeRefCountFND(file, file_node_header)
+    def __init__(self, file, document, file_node_header):
+        self.base = ObjectDeclaration2LargeRefCountFND(file, document, file_node_header)
         self.md5Hash, = struct.unpack('16s', file.read(16))
 
 
 class ReadOnlyObjectDeclaration2RefCountFND:
-    def __init__(self, file, file_node_header):
-        self.base = ObjectDeclaration2RefCountFND(file, file_node_header)
+    def __init__(self, file, document, file_node_header):
+        self.base = ObjectDeclaration2RefCountFND(file, document, file_node_header)
         self.md5Hash, = struct.unpack('16s', file.read(16))
 
 
 class ObjectDeclaration2Body:
-    def __init__(self, file):
-        self.oid = CompactID(file)
+    def __init__(self, file, document):
+        self.oid = CompactID(file, document)
         self.jcid = JCID(file)
         data, = struct.unpack('B', file.read(1))
         self.fHasOidReferences = (data & 0x1) != 0
@@ -357,10 +365,10 @@ class ObjectDeclaration2Body:
 
 
 class ObjectInfoDependencyOverridesFND:
-    def __init__(self, file, file_node_header):
+    def __init__(self, file, file_node_header, document):
         self.ref = FileNodeChunkReference(file, file_node_header.stpFormat, file_node_header.cbFormat)
         if self.ref.isFcrNil():
-            data = ObjectInfoDependencyOverrideData(file)
+            data = ObjectInfoDependencyOverrideData(file, document)
 
 
 class FileDataStoreListReferenceFND:
@@ -386,30 +394,30 @@ class FileDataStoreObjectReferenceFND:
 
 
 class ObjectInfoDependencyOverrideData:
-    def __init__(self, file):
+    def __init__(self, file, document):
         self.c8BitOverrides, self.c32BitOverrides, self.crc = struct.unpack('<III', file.read(12))
         self.Overrides1 = []
         for i in range(self.c8BitOverrides):
-            self.Overrides1.append(ObjectInfoDependencyOverride8(file))
+            self.Overrides1.append(ObjectInfoDependencyOverride8(file, document))
         for i in range(self.c32BitOverrides):
-            self.Overrides1.append(ObjectInfoDependencyOverride32(file))
+            self.Overrides1.append(ObjectInfoDependencyOverride32(file, document))
 
 
 class ObjectInfoDependencyOverride8:
-    def __init__(self, file):
-        self.oid = CompactID(file)
+    def __init__(self, file, document):
+        self.oid = CompactID(file, document)
         self.cRef, = struct.unpack('B', file.read(1))
 
 
 class ObjectInfoDependencyOverride32:
-    def __init__(self, file):
-        self.oid = CompactID(file)
+    def __init__(self, file, document):
+        self.oid = CompactID(file, document)
         self.cRef, = struct.unpack('<I', file.read(4))
 
 
 class RootObjectReference2FNDX:
-    def __init__(self, file):
-        self.oidRoot = CompactID(file)
+    def __init__(self, file, document):
+        self.oidRoot = CompactID(file, document)
         self.RootRole, = struct.unpack('<I', file.read(4))
 
 
@@ -420,8 +428,8 @@ class RootObjectReference3FND:
 
 
 class ObjectDeclarationFileData3RefCountFND:
-    def __init__(self, file):
-        self.oid = CompactID(file)
+    def __init__(self, file, document):
+        self.oid = CompactID(file, document)
         self.jcid = JCID(file)
         self.cRef, = struct.unpack('<B', file.read(1))
         self.FileDataReference = StringInStorageBuffer(file)
@@ -454,16 +462,22 @@ class RevisionManifestStart7FND:
 
 
 class CompactID:
-    def __init__(self, file):
+    def __init__(self, file, document):
         data, = struct.unpack('<I', file.read(4))
         self.n = data & 0xff
         self.guidIndex = data >> 8
+        self.document = document
+        self.current_revision = self.document.cur_revision
 
     def __str__(self):
-        return '<CompactID> ({}, {})'.format(self.n, self.guidIndex)
+        return '<ExtendedGUID> ({}, {})'.format(
+        self.document._global_identification_table[self.current_revision][self.guidIndex],
+        self.n)
 
     def __repr__(self):
-        return '<CompactID> ({}, {})'.format(self.n, self.guidIndex)
+        return '<ExtendedGUID> ({}, {})'.format(
+        self.document._global_identification_table[self.current_revision][self.guidIndex],
+        self.n)
 
 
 class JCID:
@@ -542,24 +556,24 @@ class FileDataStoreObject:
 
 
 class ObjectSpaceObjectPropSet:
-    def __init__(self, file):
-        self.OIDs = ObjectSpaceObjectStreamOfIDs(file)
+    def __init__(self, file, document):
+        self.OIDs = ObjectSpaceObjectStreamOfIDs(file, document)
         self.OSIDs = None
         if not self.OIDs.header.OsidStreamNotPresent:
-            self.OSIDs = ObjectSpaceObjectStreamOfIDs(file)
+            self.OSIDs = ObjectSpaceObjectStreamOfIDs(file, document)
         self.ContextIDs = None
         if self.OIDs.header.ExtendedStreamsPresent:
-            self.ContextIDs = ObjectSpaceObjectStreamOfIDs(file)
-        self.body = PropertySet(file, self.OIDs, self.OSIDs, self.ContextIDs)
+            self.ContextIDs = ObjectSpaceObjectStreamOfIDs(file, document)
+        self.body = PropertySet(file, self.OIDs, self.OSIDs, self.ContextIDs, document)
 
 
 class ObjectSpaceObjectStreamOfIDs:
-    def __init__(self, file):
+    def __init__(self, file, document):
         self.header = ObjectSpaceObjectStreamHeader(file)
         self.body = []
         self.head = 0
         for i in range(self.header.Count):
-            self.body.append(CompactID(file))
+            self.body.append(CompactID(file, document))
 
     def read(self):
         res = None
@@ -580,11 +594,13 @@ class ObjectSpaceObjectStreamHeader:
 
 
 class PropertySet:
-    def __init__(self, file, OIDs, OSIDs, ContextIDs):
+    def __init__(self, file, OIDs, OSIDs, ContextIDs, document):
         self.current = file.tell()
         self.cProperties, = struct.unpack('<H', file.read(2))
         self.rgPrids = []
         self.indent = ''
+        self.document = document
+        self.current_revision = document.cur_revision
         self._formated_properties = None
         for i in range(self.cProperties):
             self.rgPrids.append(PropertyID(file))
@@ -647,7 +663,7 @@ class PropertySet:
                 propertyVal = ''
                 if isinstance(self.rgData[i], PrtFourBytesOfLengthFollowedByData):
                     if 'guid' in propertyName.lower():
-                        propertyVal = uuid.UUID(bytes_le=self.rgData[i].Data)
+                        propertyVal = uuid.UUID(bytes_le=self.rgData[i].Data).hex
                     else:
                         try:
                             propertyVal = self.rgData[i].Data.decode('utf-16')
@@ -658,10 +674,10 @@ class PropertySet:
                     if 'time' in property_name_lower:
                         if len(self.rgData[i]) == 8:
                             timestamp_in_nano, = struct.unpack('<Q', self.rgData[i])
-                            propertyVal = PropertySet.parse_filetime(timestamp_in_nano)
+                            propertyVal = str(PropertySet.parse_filetime(timestamp_in_nano))
                         else:
                             timestamp_in_sec, = struct.unpack('<I', self.rgData[i])
-                            propertyVal = PropertySet.time32_to_datetime(timestamp_in_sec)
+                            propertyVal = str(PropertySet.time32_to_datetime(timestamp_in_sec))
                     elif 'height' in property_name_lower or \
                             'width' in property_name_lower or \
                             'offset' in property_name_lower or \
@@ -675,8 +691,11 @@ class PropertySet:
                         lcid, =struct.unpack('<I', self.rgData[i])
                         propertyVal = '{}({})'.format(PropertySet.lcid_to_string(lcid), lcid)
                     else:
-                        propertyVal = str(self.rgData[i])
-                self._formated_properties[propertyName] = str(propertyVal)
+                        if isinstance(self.rgData[i], list):
+                            propertyVal = [str(i) for i in self.rgData[i]]
+                        else:
+                            propertyVal = str(self.rgData[i])
+                self._formated_properties[propertyName] = propertyVal
         return self._formated_properties
 
 

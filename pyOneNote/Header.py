@@ -1,6 +1,5 @@
 import struct
 import uuid
-import json
 from pyOneNote.FileNode import *
 
 

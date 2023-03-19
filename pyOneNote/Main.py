@@ -1,11 +1,12 @@
-from Header import *
-from FileNode import *
-from OneDocument import *
+from pyOneNote.Header import *
+from pyOneNote.FileNode import *
+from pyOneNote.OneDocument import *
 import math
 import sys
 import os
 import logging
 import argparse
+import json
 
 log = logging.getLogger()
 

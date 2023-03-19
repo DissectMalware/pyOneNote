@@ -1,7 +1,5 @@
-from Header import *
-from FileNode import *
-import json
-
+from pyOneNote.Header import *
+from pyOneNote.FileNode import *
 
 class OneDocment:
     def __init__(self, file):

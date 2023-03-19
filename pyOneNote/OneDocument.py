@@ -1,15 +1,16 @@
-from pyOneNote.Header import *
-from pyOneNote.FileNode import *
+from Header import *
+from FileNode import *
 import json
 
 
 class OneDocment:
     def __init__(self, file):
-        self.header = Header(file)
-        self.root_file_node_list = FileNodeList(file, self.header.fcrFileNodeListRoot)
         self._files = None
         self._properties= None
-
+        self._global_identification_table= {}
+        self.cur_revision = None
+        self.header = Header(file)
+        self.root_file_node_list = FileNodeList(file, self, self.header.fcrFileNodeListRoot)
 
     [staticmethod]
     def traverse_nodes(root_file_node_list, nodes, filters):
@@ -33,7 +34,7 @@ class OneDocment:
         for node in nodes:
             if hasattr(node, 'propertySet'):
                 node.propertySet.body.indent= '\t\t'
-                self._properties.append({'type': str(node.data.body.jcid), 'val':node.propertySet.body.get_properties()})
+                self._properties.append({'type': str(node.data.body.jcid), 'identity':str(node.data.body.oid), 'val':node.propertySet.body.get_properties()})
 
         return  self._properties
 
@@ -46,25 +47,33 @@ class OneDocment:
 
         OneDocment.traverse_nodes(self.root_file_node_list, nodes, filters)
 
+        self.get_global_identification_table()
+
         for node in nodes:
             if hasattr(node, "data") and node.data:
                 if isinstance(node.data, FileDataStoreObjectReferenceFND):
                     if not str(node.data.guidReference) in self._files:
-                        self._files[str(node.data.guidReference)] = {"extension": "", "content": ""}
+                        self._files[str(node.data.guidReference)] = {"extension": "", "content": "", "identity": ""}
                     self._files[str(node.data.guidReference)]["content"] = node.data.fileDataStoreObject.FileData
                 elif isinstance(node.data, ObjectDeclarationFileData3RefCountFND):
                     guid = node.data.FileDataReference.StringData.replace("<ifndf>{", "").replace("}", "")
                     guid = guid.lower()
                     if not guid in self._files:
-                        self._files[guid] = {"extension": "", "content": ""}
+                        self._files[guid] = {"extension": "", "content": "", "identity": ""}
                     self._files[guid]["extension"] = node.data.Extension.StringData
+                    self._files[guid]["identity"] = str(node.data.oid)
         return self._files
+
+
+    def get_global_identification_table(self):
+        return self._global_identification_table
 
     def get_json(self):
         files_in_hex = {}
         for key, file in self.get_files().items():
             files_in_hex[key] = {'extension': file['extension'],
-                                 'content': file['content'].hex()}
+                                 'content': file['content'].hex(),
+                                 'identity': file['identity']}
 
         res = {
             "headers": self.header.convert_to_dictionary(),
@@ -77,3 +86,6 @@ class OneDocment:
     def __str__(self):
         return '{}\n{}\n{}'.format(str(self.header),
                                    str(self.rootFileNode))
+
+
+

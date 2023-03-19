@@ -1,7 +1,7 @@
 import struct
 import uuid
 import json
-from pyOneNote.FileNode import *
+from FileNode import *
 
 
 class Header:

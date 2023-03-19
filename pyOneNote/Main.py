@@ -1,6 +1,6 @@
-from pyOneNote.Header import *
-from pyOneNote.FileNode import *
-from pyOneNote.OneDocument import *
+from Header import *
+from FileNode import *
+from OneDocument import *
 import math
 import sys
 import os
@@ -35,7 +35,7 @@ def process_onenote_file(file, output_dir, extension, json_output):
         print('\n\nProperties\n####################################################################')
         indent = '\t'
         for propertySet in data['properties']:
-            print('{}{}:'.format(indent, propertySet['type']))
+            print('{}{}({}):'.format(indent, propertySet['type'], propertySet['identity']))
             for property_name, property_val in propertySet['val'].items():
                 print('{}{}: {}'.format(indent+'\t', property_name, str(property_val)))
             print("")
@@ -43,7 +43,7 @@ def process_onenote_file(file, output_dir, extension, json_output):
         print('\n\nEmbedded Files\n####################################################################')
         indent = '\t'
         for name, file in data['files'].items():
-            print('{}{}:'.format(indent, name))
+            print('{}{} ({}):'.format(indent, name, file['identity']))
             print('\t{}Extension: {}'.format(indent, file['extension']))
             print('{}'.format( get_hex_format(file['content'][:256], 16, indent+'\t')))
 

@@ -638,7 +638,11 @@ class PropertySet:
                     count, = struct.unpack('<I', file.read(4))
                 self.rgData.append(self.get_compact_ids(ContextIDs, count))
             elif type == 0x10:
-                raise NotImplementedError('ArrayOfPropertyValues is not implement')
+                cproperties, = struct.unpack('<I', file.read(4))
+                prid = PropertyID(file)
+                assert prid.type == 0x11, "prtArrayOfPropertyValues.prid.type out of spec!"
+                for _ in range(cproperties):
+                    self.rgData.append(PropertySet(file, OIDs, OSIDs, ContextIDs, document))
             elif type == 0x11:
                 self.rgData.append(PropertySet(file))
             else:

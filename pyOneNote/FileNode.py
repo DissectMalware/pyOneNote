@@ -2,6 +2,7 @@ import uuid
 import struct
 from datetime import datetime, timedelta
 import locale
+import math
 
 DEBUG = False
 
@@ -694,6 +695,7 @@ class PropertySet:
                             'offset' in property_name_lower or \
                             'margin' in property_name_lower:
                         size, = struct.unpack('<f', self.rgData[i])
+
                         propertyVal = PropertySet.half_inch_size_to_pixels(size)
                     elif 'langid' in property_name_lower:
                         lcid, =struct.unpack('<H', self.rgData[i])
@@ -723,7 +725,8 @@ class PropertySet:
 
         # Calculate the number of pixels
         pixels = picture_width * pixels_per_half_inch
-
+        if math.isnan(pixels):
+            return 0
         return int(pixels)
 
     [staticmethod]

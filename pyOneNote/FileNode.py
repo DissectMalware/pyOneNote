@@ -173,14 +173,13 @@ class FileNode:
             self.document.cur_revision = self.data.base.rid
         elif self.file_node_header.file_node_type in ["RevisionManifestEndFND", "ObjectGroupEndFND"]:
             # no data part
-
             self.data = None
         else:
             p = 1
 
         current_offset = file.tell()
         if self.file_node_header.baseType == 2:
-            if not (self.data.ref.stp == 0 and self.data.ref.cb == 0):
+            if hasattr(self, 'data') and not (self.data.ref.stp == 0 and self.data.ref.cb == 0):
                 self.children.append(FileNodeList(file, self.document, self.data.ref))
         file.seek(current_offset)
 

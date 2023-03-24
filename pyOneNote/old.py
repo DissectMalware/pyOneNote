@@ -3,7 +3,7 @@ import struct
 from datetime import datetime, timedelta
 import locale
 
-DEBUG = False
+DEBUG = True
 
 
 class FileNodeListHeader:
@@ -21,7 +21,13 @@ class FileNodeList:
         # FileNodeList can contain one or more FileNodeListFragment
         while True:
             section_end = file_chunk_reference.stp + file_chunk_reference.cb
+            print(f'section_end = {hex(section_end)}')
             fragment = FileNodeListFragment(file, document, section_end)
+            print(fragment, fragment.fileNodeListHeader.FileNodeListID)
+            print(fragment.fileNodes[-1].end, fragment.nextFragment)
+            print( fragment.nextFragment.stp & fragment.nextFragment.invalid, fragment.nextFragment.invalid, fragment.nextFragment.cb)
+            print(fragment.nextFragment.isFcrNil())
+
             self.fragments.append(fragment)
             if fragment.nextFragment.isFcrNil():
                 break
@@ -33,6 +39,7 @@ class FileNodeListFragment:
     def __init__(self, file, document, end):
         self.fileNodes = []
         self.fileNodeListHeader = FileNodeListHeader(file)
+        print('filenodelistheader', self.fileNodeListHeader.uintMagic, self.fileNodeListHeader.FileNodeListID, self.fileNodeListHeader.nFragmentSequence)
 
         # FileNodeListFragment can have one or more FileNode
         while file.tell() + 24 < end:
@@ -118,6 +125,7 @@ class FileNode:
         elif self.file_node_header.file_node_type == "ObjectSpaceManifestListStartFND":
             self.data = ObjectSpaceManifestListStartFND(file)
         elif self.file_node_header.file_node_type == "RevisionManifestListReferenceFND":
+            # causes issue
             self.data = RevisionManifestListReferenceFND(file, self.file_node_header)
         elif self.file_node_header.file_node_type == "RevisionManifestListStartFND":
             self.data = RevisionManifestListStartFND(file)
@@ -149,6 +157,7 @@ class FileNode:
         elif self.file_node_header.file_node_type == "ReadOnlyObjectDeclaration2RefCountFND":
             self.data = ReadOnlyObjectDeclaration2RefCountFND(file, self.document, self.file_node_header)
         elif self.file_node_header.file_node_type == "FileDataStoreListReferenceFND":
+            # hmmm
             self.data = FileDataStoreListReferenceFND(file, self.file_node_header)
         elif self.file_node_header.file_node_type == "FileDataStoreObjectReferenceFND":
             self.data = FileDataStoreObjectReferenceFND(file, self.file_node_header)
@@ -179,7 +188,9 @@ class FileNode:
             p = 1
 
         current_offset = file.tell()
+        self.end = current_offset
         if self.file_node_header.baseType == 2:
+            print(f'{self.file_node_header.file_node_type = } // {hex(file.tell())} // { self.data.ref = }')
             if not (self.data.ref.stp == 0 and self.data.ref.cb == 0):
                 self.children.append(FileNodeList(file, self.document, self.data.ref))
         file.seek(current_offset)
@@ -388,8 +399,8 @@ class FileDataStoreObjectReferenceFND:
         file.seek(self.ref.stp)
         try:
             self.fileDataStoreObject = FileDataStoreObject(file, self.ref)
-        except:  # noqa
-            # print(f'Error for datastore at {hex(current_offset)} // {self.ref.stp}')
+        except:
+            print(f'Error for datastore at {hex(current_offset)} // {self.ref.stp}')
             self.fileDataStoreObject = None
             pass
         file.seek(current_offset)

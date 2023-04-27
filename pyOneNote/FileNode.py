@@ -1,3 +1,4 @@
+import logging
 import uuid
 import struct
 from datetime import datetime, timedelta
@@ -13,21 +14,68 @@ class FileNodeListHeader:
 
 class FileNodeList:
     def __init__(self, file, document, file_chunk_reference):
-        file.seek(file_chunk_reference.stp)
+        self.file = file
+        self.document = document
+        self.file_chunk_reference = file_chunk_reference
         self.end = file_chunk_reference.stp + file_chunk_reference.cb
-        self.fragments = []
+        # self.fragments = []
 
+    def __iter__(self):
         # FileNodeList can contain one or more FileNodeListFragment
-        while True:
-            section_end = file_chunk_reference.stp + file_chunk_reference.cb
-            fragment = FileNodeListFragment(file, document, section_end)
-            self.fragments.append(fragment)
-            if fragment.nextFragment.isFcrNil():
-                break
-            file_chunk_reference = fragment.nextFragment
-            file.seek(fragment.nextFragment.stp)
+        self.section_start = self.file_chunk_reference.stp
+        self.section_end = self.file_chunk_reference.stp + self.file_chunk_reference.cb
+        self.is_iter_end = False
+        return self
+
+    def __next__(self):
+        if self.is_iter_end:
+            raise StopIteration
+
+        self.file.seek(self.section_start)
+        fragment = FileNodeListFragment(self.file, self.document, self.section_end)
+        # fragment = FileNodeListFragment(self.file, self.document, self.section_end)
+
+        self.section_start = fragment.nextFragment.stp
+        self.section_end = fragment.nextFragment.stp + fragment.nextFragment.cb
+
+        if fragment.nextFragment.isFcrNil():
+            self.is_iter_end = True
+        return fragment
 
 
+# my
+# class FileNodeListFragment:
+#     def __init__(self, file, document, start, end):
+#         self.fileNodeListHeader = FileNodeListHeader(file)
+#         self.file = file
+#         self.document = document
+#         self.start = start
+#         self.end = end
+#
+#         self.file.seek(self.end - 20)
+#         self.nextFragment = FileChunkReference64x32(self.file.read(12))
+#         self.footer, = struct.unpack('<Q', self.file.read(8))
+#
+#     def __iter__(self):
+#         self.file.seek(self.start)
+#         self.pos = self.start
+#         self.is_iter_end = False
+#         return self
+#
+#     def __next__(self):
+#         # FileNodeListFragment can have one or more FileNode
+#         # self.fileNodes = []
+#         if self.is_iter_end or not (self.pos + 24 < self.end):
+#             raise StopIteration
+#
+#         node = FileNode(self.file, self.document)
+#         if node.file_node_header.file_node_id == 255 or node.file_node_header.file_node_id == 0:
+#             self.is_iter_end = True
+#         self.pos = self.file.tell()
+#         return node
+
+
+# orig
 class FileNodeListFragment:
     def __init__(self, file, document, end):
         self.fileNodes = []
@@ -103,11 +151,11 @@ class FileNodeHeader:
 
 class FileNode:
     count = 0
+
     def __init__(self, file, document):
-        self.document= document
+        self.document = document
         self.file_node_header = FileNodeHeader(file)
-        if DEBUG:
-            print(str(file.tell()) + ' ' + self.file_node_header.file_node_type + ' ' + str(self.file_node_header.baseType))
+        logging.debug(str(file.tell()) + ' ' + self.file_node_header.file_node_type + ' ' + str(self.file_node_header.baseType))  # potential error
         self.children = []
         FileNode.count += 1
         if self.file_node_header.file_node_type == "ObjectGroupStartFND":
@@ -174,7 +222,7 @@ class FileNode:
             # no data part
             self.data = None
         else:
-            p = 1
+            pass
 
         current_offset = file.tell()
         if self.file_node_header.baseType == 2:
@@ -382,7 +430,6 @@ class FileDataStoreObjectReferenceFND:
         self.guidReference, = struct.unpack('<16s', file.read(16))
         self.guidReference = uuid.UUID(bytes_le=self.guidReference)
         current_offset = file.tell()
-        file.seek(self.ref.stp)
         self.fileDataStoreObject = FileDataStoreObject(file, self.ref)
         file.seek(current_offset)
 
@@ -471,17 +518,17 @@ class CompactID:
 
     def __str__(self):
         return '<ExtendedGUID> ({}, {})'.format(
-        self.document._global_identification_table[self.current_revision][self.guidIndex],
-        self.n)
+            self.document._global_identification_table[self.current_revision][self.guidIndex],
+            self.n)
 
     def __repr__(self):
         return '<ExtendedGUID> ({}, {})'.format(
-        self.document._global_identification_table[self.current_revision][self.guidIndex],
-        self.n)
+            self.document._global_identification_table[self.current_revision][self.guidIndex],
+            self.n)
 
 
 class JCID:
-    _jcid_name_mapping= {
+    _jcid_name_mapping = {
         0x00120001: "jcidReadOnlyPersistablePropertyContainerForAuthor",
         0x00020001: "jcidPersistablePropertyContainerForTOC",
         0x00020001: "jcidPersistablePropertyContainerForTOCSection",
@@ -544,15 +591,32 @@ class StringInStorageBuffer:
 
 class FileDataStoreObject:
     def __init__(self, file, fileNodeChunkReference):
+        file.seek(fileNodeChunkReference.stp)
         self.guidHeader, self.cbLength, self.unused, self.reserved = struct.unpack('<16sQ4s8s', file.read(36))
-        self.FileData, = struct.unpack('{}s'.format(self.cbLength), file.read(self.cbLength))
+        self.content_pos = file.tell()
         file.seek(fileNodeChunkReference.stp + fileNodeChunkReference.cb - 16)
-        self.guidFooter, = struct.unpack('16s', file.read(16))
+        self.guidFooter = file.read(16)
         self.guidHeader = uuid.UUID(bytes_le=self.guidHeader)
         self.guidFooter = uuid.UUID(bytes_le=self.guidFooter)
+        self.file = file
+
+    def readinto(self, dst, chunk_size=4096):
+        self.file.seek(self.content_pos)
+
+        while True:
+            chunk = self.file.read(chunk_size)
+            if not chunk:
+                break
+            dst.write(chunk)
+
+    def read_content(self):
+        self.file.seek(self.content_pos)
+        return self.file.read()
 
     def __str__(self):
-        return self.FileData[:128].hex()
+        self.file.seek(self.content_pos)
+        chunk_128 = self.file.read(128)
+        return chunk_128.hex()
 
 
 class ObjectSpaceObjectPropSet:
@@ -651,9 +715,8 @@ class PropertySet:
             data.append(stream_of_context_ids.read())
         return data
 
-
     def get_properties(self):
-        if self._formated_properties is not None :
+        if self._formated_properties is not None:
             return self._formated_properties
 
         self._formated_properties = {}
@@ -670,7 +733,7 @@ class PropertySet:
                         except:
                             propertyVal = self.rgData[i].Data.hex()
                 else:
-                    property_name_lower =  propertyName.lower()
+                    property_name_lower = propertyName.lower()
                     if 'time' in property_name_lower:
                         if len(self.rgData[i]) == 8:
                             timestamp_in_nano, = struct.unpack('<Q', self.rgData[i])
@@ -685,10 +748,10 @@ class PropertySet:
                         size, = struct.unpack('<f', self.rgData[i])
                         propertyVal = PropertySet.half_inch_size_to_pixels(size)
                     elif 'langid' in property_name_lower:
-                        lcid, =struct.unpack('<H', self.rgData[i])
+                        lcid, = struct.unpack('<H', self.rgData[i])
                         propertyVal = '{}({})'.format(PropertySet.lcid_to_string(lcid), lcid)
                     elif 'languageid' in property_name_lower:
-                        lcid, =struct.unpack('<I', self.rgData[i])
+                        lcid, = struct.unpack('<I', self.rgData[i])
                         propertyVal = '{}({})'.format(PropertySet.lcid_to_string(lcid), lcid)
                     else:
                         if isinstance(self.rgData[i], list):
@@ -698,7 +761,6 @@ class PropertySet:
                 self._formated_properties[propertyName] = propertyVal
         return self._formated_properties
 
-
     def __str__(self):
         result = ''
         for propertyName, propertyVal in self.get_properties().items():
@@ -706,6 +768,7 @@ class PropertySet:
         return result
 
     [staticmethod]
+
     def half_inch_size_to_pixels(picture_width, dpi=96):
         # Number of pixels per half-inch
         pixels_per_half_inch = dpi / 2
@@ -716,6 +779,7 @@ class PropertySet:
         return int(pixels)
 
     [staticmethod]
+
     def time32_to_datetime(time32):
         # Define the starting time (12:00 A.M., January 1, 1980, UTC)
         start = datetime(1980, 1, 1, 0, 0, 0)
@@ -728,8 +792,8 @@ class PropertySet:
 
         return dt
 
-
     [staticmethod]
+
     def parse_filetime(filetime):
         # Define the number of 100-nanosecond intervals in 1 second
         intervals_per_second = 10 ** 7
@@ -749,6 +813,7 @@ class PropertySet:
         return dt
 
     [staticmethod]
+
     def lcid_to_string(lcid):
         return locale.windows_locale.get(lcid, 'Unknown LCID')
 

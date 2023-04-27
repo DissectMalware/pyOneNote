@@ -93,7 +93,7 @@ class Header:
         self.guidLegacyFileVersion = uuid.UUID(bytes_le=self.guidLegacyFileVersion)
         self.guidFileFormat = uuid.UUID(bytes_le=self.guidFileFormat)
         self.guidAncestor = uuid.UUID(bytes_le=self.guidAncestor)
-        self.guidFileVersion = uuid.UUID(bytes_le=self.guidFileVersion )
+        self.guidFileVersion = uuid.UUID(bytes_le=self.guidFileVersion)
         self.guidDenyReadFileVersion = uuid.UUID(bytes_le=self.guidDenyReadFileVersion)
 
         self.fcrHashedChunkList = FileChunkReference64x32(self.fcrHashedChunkList)
@@ -108,7 +108,6 @@ class Header:
         self.fcrLegacyTransactionLog = FileChunkReference32(self.fcrLegacyTransactionLog)
         self.fcrLegacyFileNodeListRoot = FileChunkReference32(self.fcrLegacyFileNodeListRoot)
 
-
     def convert_to_dictionary(self):
         res = {}
         for key, item in self.__dict__.items():
@@ -116,8 +115,8 @@ class Header:
                 if isinstance(item, uuid.UUID):
                     res[key] = str(item)
                 elif isinstance(item, FileChunkReference64x32) or \
-                    isinstance(item, FileChunkReference32) or \
-                    isinstance(item, FileNodeChunkReference):
+                        isinstance(item, FileChunkReference32) or \
+                        isinstance(item, FileNodeChunkReference):
                     res[key] = str(item)
                 else:
                     res[key] = item

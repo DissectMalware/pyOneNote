@@ -43,38 +43,6 @@ class FileNodeList:
         return fragment
 
 
-# my
-# class FileNodeListFragment:
-#     def __init__(self, file, document, start, end):
-#         self.fileNodeListHeader = FileNodeListHeader(file)
-#         self.file = file
-#         self.document = document
-#         self.start = start
-#         self.end = end
-#
-#         self.file.seek(self.end - 20)
-#         self.nextFragment = FileChunkReference64x32(self.file.read(12))
-#         self.footer, = struct.unpack('<Q', self.file.read(8))
-#
-#     def __iter__(self):
-#         self.file.seek(self.start)
-#         self.pos = self.start
-#         self.is_iter_end = False
-#         return self
-#
-#     def __next__(self):
-#         # FileNodeListFragment can have one or more FileNode
-#         # self.fileNodes = []
-#         if self.is_iter_end or not (self.pos + 24 < self.end):
-#             raise StopIteration
-#
-#         node = FileNode(self.file, self.document)
-#         if node.file_node_header.file_node_id == 255 or node.file_node_header.file_node_id == 0:
-#             self.is_iter_end = True
-#         self.pos = self.file.tell()
-#         return node
-
-
 # orig
 class FileNodeListFragment:
     def __init__(self, file, document, end):
@@ -767,8 +735,7 @@ class PropertySet:
             result += '{}{}: {}\n'.format(self.indent, propertyName, propertyVal)
         return result
 
-    [staticmethod]
-
+    @staticmethod
     def half_inch_size_to_pixels(picture_width, dpi=96):
         # Number of pixels per half-inch
         pixels_per_half_inch = dpi / 2
@@ -778,8 +745,7 @@ class PropertySet:
 
         return int(pixels)
 
-    [staticmethod]
-
+    @staticmethod
     def time32_to_datetime(time32):
         # Define the starting time (12:00 A.M., January 1, 1980, UTC)
         start = datetime(1980, 1, 1, 0, 0, 0)
@@ -792,8 +758,7 @@ class PropertySet:
 
         return dt
 
-    [staticmethod]
-
+    @staticmethod
     def parse_filetime(filetime):
         # Define the number of 100-nanosecond intervals in 1 second
         intervals_per_second = 10 ** 7
@@ -812,8 +777,7 @@ class PropertySet:
 
         return dt
 
-    [staticmethod]
-
+    @staticmethod
     def lcid_to_string(lcid):
         return locale.windows_locale.get(lcid, 'Unknown LCID')
 

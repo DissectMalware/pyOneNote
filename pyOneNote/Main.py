@@ -1,4 +1,4 @@
-import io
+from io import FileIO
 
 from pyOneNote.OneDocument import *
 import math
@@ -71,7 +71,6 @@ def process_onenote_file(file, output_dir, extension, json_output):
                     os.path.join(output_dir,
                                  "file_{}{}{}".format(counter, file["extension"], extension)), "wb"
             ) as output_file:
-                # output_file.write(file["content"])
                 file["content"].readinto(output_file)
             counter += 1
 
@@ -89,19 +88,6 @@ def process_onenote_file_v2(file, output_dir, extension):
     if extension and not extension.startswith("."):
         extension = "." + extension
 
-    # counter = 0
-    # for file_guid, file in document.get_files().items():
-    #     with open(
-    #             os.path.join(output_dir,
-    #                          "file_{}{}{}".format(counter, file["extension"], extension)), "wb"
-    #     ) as output_file:
-    #         # output_file.write(file["content"])
-    #         file["content"].readinto(output_file)
-    #     counter += 1
-
-    # for file_guid, data, file_extension in document.get_files():
-    #     print(file_guid)
-
     for file_guid, file in document.get_files():
         file_extension = file["extension"]
         file_content = file["content"]
@@ -110,7 +96,6 @@ def process_onenote_file_v2(file, output_dir, extension):
                              "{}{}{}".format(file_guid, file_extension, extension)), "wb"
         ) as output_file:
             file_content.readinto(output_file)
-            # output_file.write(data)
 
 
 def get_hex_format(hex_str, col, indent):
@@ -135,8 +120,7 @@ def main():
     if not os.path.exists(args.file):
         sys.exit("File: %s doesn't exist", args.file)
 
-    # with open(args.file, "rb") as file:
-    with io.FileIO(args.file, 'rb') as file:
+    with FileIO(args.file, 'rb') as file:
         if args.optimize:
             process_onenote_file_v2(file, args.output_dir, args.extension)
         else:

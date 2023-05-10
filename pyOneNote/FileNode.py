@@ -4,6 +4,9 @@ from datetime import datetime, timedelta
 import locale
 from typing import List
 import xml.etree.ElementTree as ET
+import base64
+from io import BytesIO
+from msoffcrypto.method.ecma376_agile import ECMA376Agile
 
 DEBUG = True
 
@@ -147,6 +150,13 @@ class FileNode:
             current_offset = file.tell()
             if self.data.body.jcid.IsPropertySet:
                 file.seek(self.data.ref.stp)
+                # if document.is_encrypted:
+                #     blob = file.read(self.data.ref.cb)
+                #     size_bytes = struct.pack('>I', self.data.ref.cb)
+                #     decrypted_blob = self.decrypt_blob(size_bytes + b"\x00\x00\x00\x00" + blob[8:])
+                    
+                #     self.propertySet = ObjectSpaceObjectPropSet(decrypted_blob, document)
+                # else:
                 self.propertySet = ObjectSpaceObjectPropSet(file, document)
             file.seek(current_offset)
         elif self.file_node_header.file_node_type == "ReadOnlyObjectDeclaration2LargeRefCountFND":
@@ -186,6 +196,14 @@ class FileNode:
         if self.file_node_header.baseType == 2:
             self.children.append(FileNodeList(file, self.document, self.data.ref))
         file.seek(current_offset)
+
+    def decrypt_blob(self, object):
+        buf = BytesIO(object)
+        obuf = ECMA376Agile.decrypt(key=self.document.encrypted_config.secret_key,
+                                    keyDataSalt=self.document.encrypted_config.keyData["saltValue"],
+                                    hashAlgorithm=self.document.encrypted_config.keyData["hashAlgorithm"],
+                                    ibuf=buf)
+        return BytesIO(obuf)
 
 
 class ExtendedGUID:
@@ -349,7 +367,7 @@ class ObjectDataEncryptionKeyV2FNDX:
         file.seek(self.ref.stp)
         data = file.read(self.ref.cb)
         xml_data = data[32: len(data) - 9]
-        self.encryption_config = Encryption.parse(xml_data)
+        self.encryption_config = Encryption.parse(xml_data, "123456")
         file.seek(current_log)
         
 
@@ -940,12 +958,35 @@ class PropertyID:
 
 
 class Encryption:
-    def __init__(self, keyData, keyEncryptors):
+    def __init__(self, keyData, keyEncryptors, password):
         self.keyData = keyData
         self.keyEncryptors = keyEncryptors
 
+        keyEncryptor = keyEncryptors[0]
+        self.is_verified = ECMA376Agile.verify_password(
+            password,
+            keyEncryptor['saltValue'],
+            keyEncryptor['hashAlgorithm'],
+            keyEncryptor['encryptedVerifierHashInput'],
+            keyEncryptor['encryptedVerifierHashValue'],
+            keyEncryptor['spinCount'],
+            keyEncryptor['keyBits'],
+        )
+        self.secret_key = None
+        if self.is_verified:
+            self.secret_key = ECMA376Agile.makekey_from_password(
+                password,
+                keyEncryptor['saltValue'],
+                keyEncryptor['hashAlgorithm'],
+                keyEncryptor['encryptedKeyValue'],
+                keyEncryptor['spinCount'],
+                keyEncryptor['keyBits'],
+            )
+           
+
+
     @staticmethod
-    def parse(xml_string):
+    def parse(xml_string, password):
         namespaces = {
             "e": "http://schemas.microsoft.com/office/2006/encryption",
             "p": "http://schemas.microsoft.com/office/2006/keyEncryptor/password",
@@ -961,7 +1002,7 @@ class Encryption:
             "cipherAlgorithm": key_data_node.get("cipherAlgorithm"),
             "cipherChaining": key_data_node.get("cipherChaining"),
             "hashAlgorithm": key_data_node.get("hashAlgorithm"),
-            "saltValue": key_data_node.get("saltValue")
+            "saltValue": base64.b64decode(key_data_node.get("saltValue"))
         }
         key_encryptors = []
         key_encryptor_nodes = root.findall("e:keyEncryptors/e:keyEncryptor", namespaces)
@@ -978,10 +1019,10 @@ class Encryption:
                     "cipherAlgorithm": encrypted_key_node.get("cipherAlgorithm"),
                     "cipherChaining": encrypted_key_node.get("cipherChaining"),
                     "hashAlgorithm": encrypted_key_node.get("hashAlgorithm"),
-                    "saltValue": encrypted_key_node.get("saltValue"),
-                    "encryptedVerifierHashInput": encrypted_key_node.get("encryptedVerifierHashInput"),
-                    "encryptedVerifierHashValue": encrypted_key_node.get("encryptedVerifierHashValue"),
-                    "encryptedKeyValue": encrypted_key_node.get("encryptedKeyValue")
+                    "saltValue": base64.b64decode(encrypted_key_node.get("saltValue")),
+                    "encryptedVerifierHashInput": base64.b64decode(encrypted_key_node.get("encryptedVerifierHashInput")),
+                    "encryptedVerifierHashValue": base64.b64decode(encrypted_key_node.get("encryptedVerifierHashValue")),
+                    "encryptedKeyValue": base64.b64decode(encrypted_key_node.get("encryptedKeyValue"))
                 }
                 key_encryptors.append(encrypted_key)
-        return Encryption(key_data, key_encryptors)
+        return Encryption(key_data, key_encryptors, password)

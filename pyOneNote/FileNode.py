@@ -2,8 +2,10 @@ import uuid
 import struct
 from datetime import datetime, timedelta
 import locale
+from typing import List
+import xml.etree.ElementTree as ET
 
-DEBUG = False
+DEBUG = True
 
 
 class FileNodeListHeader:
@@ -106,6 +108,7 @@ class FileNode:
     def __init__(self, file, document):
         self.document= document
         self.file_node_header = FileNodeHeader(file)
+        self.is_encrypted = False
         if DEBUG:
             print(str(file.tell()) + ' ' + self.file_node_header.file_node_type + ' ' + str(self.file_node_header.baseType))
         self.children = []
@@ -132,10 +135,13 @@ class FileNode:
             self.data = GlobalIdTableEntryFNDX(file)
             if not self.document.cur_revision in self.document._global_identification_table:
                 self.document._global_identification_table[self.document.cur_revision] = {}
-
             self.document._global_identification_table[self.document.cur_revision][self.data.index] = self.data.guid
         elif self.file_node_header.file_node_type == "DataSignatureGroupDefinitionFND":
             self.data = DataSignatureGroupDefinitionFND(file)
+        elif self.file_node_header.file_node_type == "ObjectDataEncryptionKeyV2FNDX":
+            self.data = ObjectDataEncryptionKeyV2FNDX(file, self.document, self.file_node_header)
+            document.is_encrypted = True
+            document.encrypted_config = self.data.encryption_config
         elif self.file_node_header.file_node_type == "ObjectDeclaration2RefCountFND":
             self.data = ObjectDeclaration2RefCountFND(file, self.document, self.file_node_header)
             current_offset = file.tell()
@@ -336,12 +342,22 @@ class ObjectDeclaration2LargeRefCountFND:
         self.cRef, = struct.unpack('<I', file.read(4))
 
 
+class ObjectDataEncryptionKeyV2FNDX:
+    def __init__(self, file, document, file_node_header):
+        self.ref = FileNodeChunkReference(file, file_node_header.stpFormat, file_node_header.cbFormat)
+        current_log = file.tell()
+        file.seek(self.ref.stp)
+        data = file.read(self.ref.cb)
+        xml_data = data[32: len(data) - 9]
+        self.encryption_config = Encryption.parse(xml_data)
+        file.seek(current_log)
+        
+
 class ObjectDeclaration2RefCountFND:
     def __init__(self, file, document, file_node_header):
         self.ref = FileNodeChunkReference(file, file_node_header.stpFormat, file_node_header.cbFormat)
         self.body = ObjectDeclaration2Body(file, document)
         self.cRef, = struct.unpack('<B', file.read(1))
-
 
 class ReadOnlyObjectDeclaration2LargeRefCountFND:
     def __init__(self, file, document, file_node_header):
@@ -921,3 +937,51 @@ class PropertyID:
 
     def __str__(self):
         return self.get_property_name()
+
+
+class Encryption:
+    def __init__(self, keyData, keyEncryptors):
+        self.keyData = keyData
+        self.keyEncryptors = keyEncryptors
+
+    @staticmethod
+    def parse(xml_string):
+        namespaces = {
+            "e": "http://schemas.microsoft.com/office/2006/encryption",
+            "p": "http://schemas.microsoft.com/office/2006/keyEncryptor/password",
+            "c": "http://schemas.microsoft.com/office/2006/keyEncryptor/certificate"
+        }
+        root = ET.fromstring(xml_string)
+        key_data_node = root.find("e:keyData", namespaces)
+        key_data = {
+            "saltSize": int(key_data_node.get("saltSize")),
+            "blockSize": int(key_data_node.get("blockSize")),
+            "keyBits": int(key_data_node.get("keyBits")),
+            "hashSize": int(key_data_node.get("hashSize")),
+            "cipherAlgorithm": key_data_node.get("cipherAlgorithm"),
+            "cipherChaining": key_data_node.get("cipherChaining"),
+            "hashAlgorithm": key_data_node.get("hashAlgorithm"),
+            "saltValue": key_data_node.get("saltValue")
+        }
+        key_encryptors = []
+        key_encryptor_nodes = root.findall("e:keyEncryptors/e:keyEncryptor", namespaces)
+        for key_encryptor_node in key_encryptor_nodes:
+            key_encryptor_uri = key_encryptor_node.get("uri")
+            if key_encryptor_uri == "http://schemas.microsoft.com/office/2006/keyEncryptor/password":
+                encrypted_key_node = key_encryptor_node.find("p:encryptedKey", namespaces)
+                encrypted_key = {
+                    "spinCount": int(encrypted_key_node.get("spinCount")),
+                    "saltSize": int(encrypted_key_node.get("saltSize")),
+                    "blockSize": int(encrypted_key_node.get("blockSize")),
+                    "keyBits": int(encrypted_key_node.get("keyBits")),
+                    "hashSize": int(encrypted_key_node.get("hashSize")),
+                    "cipherAlgorithm": encrypted_key_node.get("cipherAlgorithm"),
+                    "cipherChaining": encrypted_key_node.get("cipherChaining"),
+                    "hashAlgorithm": encrypted_key_node.get("hashAlgorithm"),
+                    "saltValue": encrypted_key_node.get("saltValue"),
+                    "encryptedVerifierHashInput": encrypted_key_node.get("encryptedVerifierHashInput"),
+                    "encryptedVerifierHashValue": encrypted_key_node.get("encryptedVerifierHashValue"),
+                    "encryptedKeyValue": encrypted_key_node.get("encryptedKeyValue")
+                }
+                key_encryptors.append(encrypted_key)
+        return Encryption(key_data, key_encryptors)

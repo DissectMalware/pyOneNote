@@ -174,10 +174,12 @@ class FileNode:
             # no data part
             self.data = None
         else:
+            # ensure self.data is initialized
+            self.data = None
             p = 1
 
         current_offset = file.tell()
-        if self.file_node_header.baseType == 2:
+        if self.file_node_header.baseType == 2 and self.data is not None:
             self.children.append(FileNodeList(file, self.document, self.data.ref))
         file.seek(current_offset)
 

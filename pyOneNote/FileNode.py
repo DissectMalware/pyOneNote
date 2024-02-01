@@ -173,11 +173,19 @@ class FileNode:
         elif self.file_node_header.file_node_type in ["RevisionManifestEndFND", "ObjectGroupEndFND"]:
             # no data part
             self.data = None
+        elif self.file_node_header.file_node_type == "GlobalIdTableStartFNDX":
+            self.data = GlobalIdTableStartFNDX(file)
+        elif self.file_node_header.file_node_type == "GlobalIdTableEntry2FNDX":
+            self.data = GlobalIdTableEntry2FNDX(file)
+        elif self.file_node_header.file_node_type == "GlobalIdTableEntry3FNDX":
+            self.data = GlobalIdTableEntry3FNDX(file)
         else:
+            # ensure self.data is initialized
+            self.data = None
             p = 1
 
         current_offset = file.tell()
-        if self.file_node_header.baseType == 2:
+        if self.file_node_header.baseType == 2 and self.data is not None:
             self.children.append(FileNodeList(file, self.document, self.data.ref))
         file.seek(current_offset)
 
@@ -322,6 +330,21 @@ class GlobalIdTableEntryFNDX:
     def __init__(self, file):
         self.index, self.guid = struct.unpack('<I16s', file.read(20))
         self.guid = uuid.UUID(bytes_le=self.guid)
+
+
+class GlobalIdTableEntry2FNDX:
+    def __init__(self, file):
+        self.iIndexMapFrom, self.iIndexMapTo = struct.unpack('<II', file.read(8))
+
+
+class GlobalIdTableEntry3FNDX:
+    def __init__(self, file):
+        self.iIndexCopyFromStart, self.cEntriesToCopy, self.iIndexCopyToStart = struct.unpack('<III', file.read(12))
+
+
+class GlobalIdTableStartFNDX:
+    def __init__(self, file):
+        self.reserved = file.read(1)
 
 
 class DataSignatureGroupDefinitionFND:

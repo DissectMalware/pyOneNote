@@ -19,7 +19,7 @@ def check_valid(file):
     return False
 
 
-def process_onenote_file(file, output_dir, extension, json_output):
+def process_onenote_file(file, output_dir, extension, json_output, preserve_filenames):
     if not check_valid(file):
         log.error("please provide valid One file")
         exit()
@@ -35,7 +35,7 @@ def process_onenote_file(file, output_dir, extension, json_output):
 
         print('\n\nProperties\n####################################################################')
         indent = '\t'
-        file_metadata ={}
+        file_metadata = {}
         for propertySet in data['properties']:
             print('{}{}({}):'.format(indent, propertySet['type'], propertySet['identity']))
             if propertySet['type'] == "jcidEmbeddedFileNode":
@@ -64,12 +64,29 @@ def process_onenote_file(file, output_dir, extension, json_output):
             extension = "." + extension
 
         counter = 0
+        if preserve_filenames:
+            filename_counters = {}
+
         for file_guid, file in document.get_files().items():
-            with open(
-                    os.path.join(output_dir,
-                                 "file_{}{}{}".format(counter, file["extension"], extension)), "wb"
-            ) as output_file:
+            filename = "file_{}{}{}".format(counter, file["extension"], extension)
+            if preserve_filenames and file['identity'] in file_metadata:
+                if file_metadata[file['identity']].get("EmbeddedFileName"):
+                    filename = file_metadata[file['identity']]["EmbeddedFileName"]
+                elif file_metadata[file['identity']].get("ImageFileName"):
+                    filename = file_metadata[file['identity']]["ImageFileName"]
+
+                filename = filename.replace('\x00', '')
+
+                if filename not in filename_counters:
+                    filename_counters[filename] = 0
+                else:
+                    filename_counters[filename] += 1
+                    ext_index = filename.index(extension)
+                    filename = "{} ({}){}".format(filename[:ext_index], filename_counters[filename], filename[ext_index:])
+
+            with open(os.path.join(output_dir, filename), "wb") as output_file:
                 output_file.write(file["content"])
+
             counter += 1
 
     return json.dumps(data)
@@ -90,6 +107,8 @@ def main():
     p.add_argument("-o", "--output-dir", action="store", default="./", help="Path where store extracted files")
     p.add_argument("-e", "--extension", action="store", default="", help="Append this extension to extracted file(s)")
     p.add_argument("-j", "--json", action="store_true", default=False, help="Generate JSON output only, no dumps or prints")
+    p.add_argument("-p", "--preserve-filenames", action="store_true", default=False, 
+                   help="Preserve original filename(s) (when available) for extracted files")
 
     args = p.parse_args()
 
@@ -97,7 +116,7 @@ def main():
         sys.exit("File: %s doesn't exist", args.file)
 
     with open(args.file, "rb") as file:
-        process_onenote_file(file, args.output_dir, args.extension, args.json)
+        process_onenote_file(file, args.output_dir, args.extension, args.json, args.preserve_filenames)
         
 
 if __name__ == "__main__":

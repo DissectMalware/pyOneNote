@@ -21,14 +21,14 @@ EXPECTED = {
         {
             "title": "New Section 1",
             "pages": [
-                {"title": "דוגמא", "contains": "זאת חוברת לדוגמא"},
-                {"title": "עוד דוגמה", "contains": "הנה - כתוב פה טקסט. איזה יופי!"},
+                {"title": "\u05d3\u05d5\u05d2\u05de\u05d0", "contains": "\u05d6\u05d0\u05ea \u05d7\u05d5\u05d1\u05e8\u05ea \u05dc\u05d3\u05d5\u05d2\u05de\u05d0"},
+                {"title": "\u05e2\u05d5\u05d3 \u05d3\u05d5\u05d2\u05de\u05d4", "contains": "\u05d4\u05e0\u05d4 - \u05db\u05ea\u05d5\u05d1 \u05e4\u05d4 \u05d8\u05e7\u05e1\u05d8. \u05d0\u05d9\u05d6\u05d4 \u05d9\u05d5\u05e4\u05d9!"},
             ],
         },
         {
             "title": "New Section 2",
             "pages": [
-                {"title": "משהו מעניין?", "contains": "משהו מעניין?"},
+                {"title": "\u05de\u05e9\u05d4\u05d5 \u05de\u05e2\u05e0\u05d9\u05d9\u05df?", "contains": "\u05de\u05e9\u05d4\u05d5 \u05de\u05e2\u05e0\u05d9\u05d9\u05df?"},
             ],
         },
     ],
@@ -39,7 +39,7 @@ EXPECTED = {
                 {
                     "title": "New Section 1",
                     "pages": [
-                        {"title": "מממממממ", "contains": "מממממממ"},
+                        {"title": "\u05de\u05de\u05de\u05de\u05de\u05de\u05de", "contains": "\u05de\u05de\u05de\u05de\u05de\u05de\u05de"},
                     ],
                 }
             ],
@@ -130,6 +130,18 @@ def _compare_groups(actual_groups: List[Dict[str, Any]], expected_groups: List[D
         )
 
 
+def validate_notebook(notebook) -> List[str]:
+    actual = _actual_snapshot(notebook)
+    errors: List[str] = []
+
+    if actual["title"] != EXPECTED["title"]:
+        errors.append(f"title: expected '{EXPECTED['title']}', got '{actual['title']}'")
+
+    _compare_sections(actual["sections"], EXPECTED["sections"], "sections", errors)
+    _compare_groups(actual["section_groups"], EXPECTED["section_groups"], "section_groups", errors)
+    return errors
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--notebook-dir", required=True, help="Path to notebook directory")
@@ -153,13 +165,7 @@ def main() -> int:
     if args.print_actual:
         print(json.dumps(actual, ensure_ascii=False, indent=2))
 
-    errors: List[str] = []
-    if actual["title"] != EXPECTED["title"]:
-        errors.append(f"title: expected '{EXPECTED['title']}', got '{actual['title']}'")
-
-    _compare_sections(actual["sections"], EXPECTED["sections"], "sections", errors)
-    _compare_groups(actual["section_groups"], EXPECTED["section_groups"], "section_groups", errors)
-
+    errors = validate_notebook(notebook)
     if errors:
         print("FAIL: notebook regression check found mismatches:")
         for err in errors:

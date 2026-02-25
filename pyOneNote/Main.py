@@ -1,6 +1,4 @@
-from pyOneNote.Header import *
-from pyOneNote.FileNode import *
-from pyOneNote.OneDocument import *
+from pyOneNote.parser import OneNoteParser
 import math
 import sys
 import os
@@ -10,23 +8,37 @@ import json
 
 log = logging.getLogger()
 
-def check_valid(file):
-    if file.read(16) in (
-        b"\xE4\x52\x5C\x7B\x8C\xD8\xA7\x4D\xAE\xB1\x53\x78\xD0\x29\x96\xD3",
-        b"\xA1\x2F\xFF\x43\xD9\xEF\x76\x4C\x9E\xE2\x10\xEA\x57\x22\x76\x5F",
-    ):
-        return True
-    return False
+
+def get_hex_format(hex_str, col, indent):
+    res = ''
+    chars = (col*2)
+    for i in range(math.ceil( len(hex_str)/chars)):
+        segment = hex_str[i*chars: (i+1)*chars]
+        res += indent + ' '.join([segment[i:i+2] for i in range(0, len(segment), 2)]) +'\n'
+    return res
 
 
-def process_onenote_file(file, output_dir, extension, json_output):
-    if not check_valid(file):
-        log.error("please provide valid One file")
-        exit()
-
-    file.seek(0)
-    document = OneDocment(file)
-    data = document.get_json()
+def process_onenote_file(file_path, output_dir, extension, json_output):
+    """
+    Process a OneNote file using the OneNoteParser API.
+    
+    Args:
+        file_path (str): Path to the .one file
+        output_dir (str): Directory to save extracted files
+        extension (str): Optional extension to append to extracted files
+        json_output (bool): If True, only return JSON; if False, print detailed output
+        
+    Returns:
+        str: JSON representation of the document
+    """
+    try:
+        parser = OneNoteParser(file_path)
+    except (FileNotFoundError, ValueError) as e:
+        log.error(f"Error opening file: {e}")
+        exit(1)
+    
+    data = parser.get_json()
+    
     if not json_output:
         print('Headers\n####################################################################')
         indent = '\t'
@@ -35,7 +47,7 @@ def process_onenote_file(file, output_dir, extension, json_output):
 
         print('\n\nProperties\n####################################################################')
         indent = '\t'
-        file_metadata ={}
+        file_metadata = {}
         for propertySet in data['properties']:
             print('{}{}({}):'.format(indent, propertySet['type'], propertySet['identity']))
             if propertySet['type'] == "jcidEmbeddedFileNode":
@@ -44,7 +56,6 @@ def process_onenote_file(file, output_dir, extension, json_output):
             if propertySet['type'] == "jcidImageNode":
                 if 'PictureContainer' in propertySet['val']:
                     file_metadata[propertySet['val']['PictureContainer'][0]] = propertySet['val']
-
 
             for property_name, property_val in propertySet['val'].items():
                 print('{}{}: {}'.format(indent+'\t', property_name, str(property_val)))
@@ -58,19 +69,9 @@ def process_onenote_file(file, output_dir, extension, json_output):
             if(file['identity'] in file_metadata):
                 for property_name, property_val in file_metadata[file['identity']].items():
                     print('{}{}: {}'.format(indent+'\t', property_name, str(property_val)))
-            print('{}'.format( get_hex_format(file['content'][:256], 16, indent+'\t')))
+            print('{}'.format(get_hex_format(file['content'][:256], 16, indent+'\t')))
 
-        if extension and not extension.startswith("."):
-            extension = "." + extension
-
-        counter = 0
-        for file_guid, file in document.get_files().items():
-            with open(
-                    os.path.join(output_dir,
-                                 "file_{}{}{}".format(counter, file["extension"], extension)), "wb"
-            ) as output_file:
-                output_file.write(file["content"])
-            counter += 1
+        parser.save_files(output_dir, extension)
 
     return json.dumps(data)
 

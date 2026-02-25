@@ -128,3 +128,11 @@ dmypy.json
 # Pyre type checker
 .pyre/
 .idea/
+
+# Output folders created by scripts
+text_output/
+test_output/
+onenote_output/
+
+# Script outputs
+scripts/*.output

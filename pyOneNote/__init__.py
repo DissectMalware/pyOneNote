@@ -11,7 +11,7 @@ from pyOneNote.exporter import (
     build_notebook_from_directory,
 )
 
-__version__ = '0.0.2'
+__version__ = '0.1.0'
 
 __all__ = [
     'OneNoteParser',

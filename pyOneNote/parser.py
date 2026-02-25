@@ -22,6 +22,12 @@ import uuid
 from typing import Dict, List, Tuple, Optional
 from pyOneNote.Header import Header
 from pyOneNote.OneDocument import OneDocment
+from pyOneNote.exporter import (
+    build_pages_from_document,
+    build_sections_from_document,
+    build_notebook_from_document,
+)
+from pyOneNote.models import OneNotePage, OneNoteSection, OneNoteNotebook
 
 
 class OneNoteParser:
@@ -133,6 +139,18 @@ class OneNoteParser:
         """
         return self.document.get_json()
     
+    def get_text(self) -> List[OneNotePage]:
+        """
+        Extract and return OneNotePage objects from the document.
+        
+        Returns:
+            List[OneNotePage]: List of page objects with text content extracted
+        """
+        try:
+            return build_pages_from_document(self.document)
+        except Exception:
+            return []
+    
     def save_files(self, output_dir: str, extension: str = '') -> int:
         """
         Extract and save all embedded files to a directory.
@@ -184,3 +202,36 @@ class OneNoteParser:
         files = self.get_embedded_files()
         extensions = [f['extension'] for f in files.values()]
         return list(set(extensions))  # Return unique extensions
+    
+    def get_pages(self) -> List[OneNotePage]:
+        """
+        Get all pages from the document as OneNotePage objects.
+        
+        Returns:
+            List[OneNotePage]: List of all pages with content extracted
+        """
+        return self.get_text()
+    
+    def get_sections(self) -> List[OneNoteSection]:
+        """
+        Get all sections from the document as OneNoteSection objects.
+        
+        Returns:
+            List[OneNoteSection]: List of sections (without pages assigned yet)
+        """
+        try:
+            return build_sections_from_document(self.document)
+        except Exception:
+            return []
+    
+    def get_notebook(self) -> OneNoteNotebook:
+        """
+        Get the entire notebook as a OneNoteNotebook object with all sections and pages.
+        
+        Returns:
+            OneNoteNotebook: Complete notebook structure with sections and pages populated
+        """
+        try:
+            return build_notebook_from_document(self.document)
+        except Exception:
+            return OneNoteNotebook()

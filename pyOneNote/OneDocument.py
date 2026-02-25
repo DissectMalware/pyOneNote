@@ -66,6 +66,66 @@ class OneDocment:
     def get_global_identification_table(self):
         return self._global_identification_table
 
+    def get_nodes(self, filters=None):
+        """
+        Get all file nodes matching the given node type names.
+        
+        Args:
+            filters (List[str]): List of node type class names to match (e.g., ['ObjectDeclaration2RefCountFND']).
+                                If empty or None, returns all nodes.
+        
+        Returns:
+            List[FileNode]: Matching file nodes
+        """
+        if filters is None:
+            filters = []
+        nodes = []
+        OneDocment.traverse_nodes(self.root_file_node_list, nodes, filters)
+        return nodes
+
+    def get_nodes_by_jcid(self, jcid_names=None):
+        """
+        Get all file nodes with property sets matching specific JCID names.
+        
+        Args:
+            jcid_names (List[str]): List of JCID string names (e.g., ['jcidPageNode', 'jcidSectionNode']).
+                                   If None, returns nodes with ObjectDeclaration2RefCountFND.
+        
+        Returns:
+            List[FileNode]: Matching file nodes with property sets
+        """
+        if jcid_names is None:
+            jcid_names = []
+        
+        nodes = self.get_nodes(['ObjectDeclaration2RefCountFND'])
+        
+        if not jcid_names:
+            return nodes
+        
+        result = []
+        for node in nodes:
+            if hasattr(node, 'data') and hasattr(node.data, 'body'):
+                jcid_str = str(node.data.body.jcid)
+                if any(name in jcid_str for name in jcid_names):
+                    result.append(node)
+        
+        return result
+
+    def find_section_nodes(self):
+        """Find all section node declarations."""
+        return self.get_nodes_by_jcid(['jcidSectionNode'])
+
+    def find_section_group_nodes(self):
+        """Find all section group node declarations."""
+        return self.get_nodes_by_jcid(['jcidPersistablePropertyContainerForTOCSection'])
+
+    def find_page_nodes(self):
+        """Find all page node declarations."""
+        return self.get_nodes_by_jcid(['jcidPageNode'])
+
+    def get_global_identification_table(self):
+        return self._global_identification_table
+
     def get_json(self):
         files_in_hex = {}
         for key, file in self.get_files().items():

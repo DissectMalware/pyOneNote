@@ -1,7 +1,22 @@
 import re
+from pathlib import Path
+from datetime import datetime
 from typing import Any, Dict, Iterable, List, Optional
 
 from .models import OneNotePage, OneNoteSection, OneNoteSectionGroup, OneNoteNotebook
+
+
+IMPORTANT_PAGE_METADATA_KEYS = {
+    "CachedTitleString",
+    "CreationTimeStamp",
+    "LastModifiedTimeStamp",
+    "LastModifiedTime",
+    "Author",
+    "AuthorMostRecent",
+    "LanguageID",
+    "PageLevel",
+    "IsConflictPage",
+}
 
 
 def _safe_decode_bytes(b: bytes) -> str:
@@ -73,12 +88,35 @@ def extract_text_from_properties_clean(properties: Dict[str, Any]) -> str:
 
 
 _whitespace_re = re.compile(r"\s+")
+_time_only_re = re.compile(r"^\d{1,2}:\d{2}$")
+_iso_datetime_re = re.compile(r"^\d{4}-\d{2}-\d{2}(?: \d{2}:\d{2}:\d{2}(?:\.\d+)?)?$")
 
 
 def _normalize_join(strings: Iterable[str]) -> str:
     joined = " ".join(s.strip() for s in strings if s is not None and str(s).strip())
     # collapse multiple whitespace
     return _whitespace_re.sub(" ", joined).strip()
+
+
+def _is_header_like_snippet(text: str, page_title: str) -> bool:
+    """
+    Filter snippets that are page header artifacts rather than body content.
+    """
+    t = (text or "").strip()
+    if not t:
+        return True
+    if page_title and t == page_title.strip():
+        return True
+    if _time_only_re.match(t):
+        return True
+    if _iso_datetime_re.match(t):
+        return True
+    if all(_iso_datetime_re.match(part) for part in t.split() if part):
+        return True
+    # Common OneNote date header line in Hebrew locales.
+    if t.startswith("יום ") and any(ch.isdigit() for ch in t):
+        return True
+    return False
 
 
 def extract_text_from_properties(properties: Dict[str, Any]) -> str:
@@ -135,6 +173,138 @@ def _clean_text_content(text: str) -> str:
     return cleaned
 
 
+def _decode_text_value(value: Any) -> str:
+    """Decode a value into text while preserving Unicode (including Hebrew)."""
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    if not isinstance(value, (bytes, bytearray)):
+        return str(value)
+
+    raw = bytes(value)
+    for encoding in ("utf-16le", "utf-16", "utf-8", "latin-1"):
+        try:
+            return raw.decode(encoding)
+        except Exception:
+            continue
+    return ""
+
+
+def _extract_important_page_metadata(props: Dict[str, Any]) -> Dict[str, Any]:
+    metadata: Dict[str, Any] = {}
+    if not isinstance(props, dict):
+        return metadata
+
+    for key in IMPORTANT_PAGE_METADATA_KEYS:
+        if key not in props:
+            continue
+        value = props[key]
+        if isinstance(value, (bytes, bytearray, str)):
+            metadata[key] = _clean_text_content(_decode_text_value(value))
+        else:
+            metadata[key] = value
+
+    return metadata
+
+
+def _parse_datetime(value: Any) -> Optional[datetime]:
+    if not isinstance(value, str):
+        return None
+    try:
+        return datetime.fromisoformat(value)
+    except Exception:
+        return None
+
+
+def _extract_text_from_richtext_properties(props: Dict[str, Any]) -> str:
+    text = ""
+    if "RichEditTextUnicode" in props:
+        text = _decode_text_value(props.get("RichEditTextUnicode"))
+    elif "TextExtendedAscii" in props:
+        raw = str(props.get("TextExtendedAscii", ""))
+        try:
+            text = bytes.fromhex(raw).decode("ascii", errors="ignore")
+        except Exception:
+            text = raw
+    text = _clean_text_content(text)
+    # Remove inline ISO datetime artifacts that often come from metadata serialization.
+    text = re.sub(r"\b\d{4}-\d{2}-\d{2}(?: \d{2}:\d{2}:\d{2}(?:\.\d+)?)?\b", "", text)
+    return _clean_text_content(text)
+
+
+def _latest_nodes_by_oid(nodes) -> List[Any]:
+    """
+    Keep only the latest node version for each OID.
+    Latest preference:
+    1) greater LastModifiedTime (if present)
+    2) larger traversal index as fallback
+    """
+    latest: Dict[str, tuple] = {}
+    for idx, node in enumerate(nodes):
+        if not hasattr(node, "data") or not hasattr(node.data, "body"):
+            continue
+        oid = str(node.data.body.oid)
+        props = {}
+        if hasattr(node, "propertySet") and hasattr(node.propertySet, "body"):
+            props = node.propertySet.body.get_properties()
+        lm = _parse_datetime(props.get("LastModifiedTime")) if isinstance(props, dict) else None
+        current = latest.get(oid)
+        if current is None:
+            latest[oid] = (lm, idx, node)
+            continue
+        prev_lm, prev_idx, _ = current
+        if lm and (prev_lm is None or lm >= prev_lm):
+            latest[oid] = (lm, idx, node)
+        elif lm is None and idx >= prev_idx:
+            latest[oid] = (lm, idx, node)
+    return [v[2] for v in sorted(latest.values(), key=lambda x: x[1])]
+
+
+def _build_page_metadata_candidates(document) -> List[Dict[str, Any]]:
+    candidates: List[Dict[str, Any]] = []
+    try:
+        page_meta_nodes = _latest_nodes_by_oid(document.get_nodes_by_jcid(["jcidPageMetaData"]))
+    except Exception:
+        return candidates
+
+    for idx, node in enumerate(page_meta_nodes):
+        if not hasattr(node, "propertySet") or not hasattr(node.propertySet, "body"):
+            continue
+        props = node.propertySet.body.get_properties()
+        title = _clean_text_content(_decode_text_value(props.get("CachedTitleString", ""))).strip("\x00").strip()
+        created = _parse_datetime(props.get("TopologyCreationTimeStamp"))
+        page_id = str(node.data.body.oid) if hasattr(node, "data") and hasattr(node.data, "body") else f"meta-{idx}"
+        metadata = _extract_important_page_metadata(props)
+        metadata["TopologyCreationTimeStamp"] = props.get("TopologyCreationTimeStamp")
+        candidates.append(
+            {
+                "page_id": page_id,
+                "title": title,
+                "created": created,
+                "metadata": metadata,
+            }
+        )
+
+    # deterministic order by creation time then id
+    candidates.sort(key=lambda c: ((c["created"] or datetime.min), c["page_id"]))
+
+    # Deduplicate repeated metadata entries across object spaces/revisions.
+    deduped: List[Dict[str, Any]] = []
+    seen = set()
+    for c in candidates:
+        title_key = (c["title"] or "").strip().lower()
+        created = c["created"]
+        created_key = created.replace(microsecond=0) if isinstance(created, datetime) else None
+        key = (title_key, created_key)
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(c)
+
+    return deduped
+
+
 def _extract_clean_title(props: Dict[str, Any]) -> Optional[str]:
     """Extract just the title text, filtering out metadata and special formats."""
     candidates = ["title", "name", "pageTitle", "PageTitle", "displayName", "CachedTitleString"]
@@ -145,13 +315,9 @@ def _extract_clean_title(props: Dict[str, Any]) -> Optional[str]:
         if key is not None:
             v = props[key]
             if isinstance(v, (bytes, bytearray)):
-                try:
-                    title = v.decode("utf-16le").strip()
-                    title = _clean_text_content(title)
-                    if title and not title.startswith('<') and len(title) < 200:
-                        return title
-                except Exception:
-                    pass
+                title = _clean_text_content(_decode_text_value(v).strip())
+                if title and not title.startswith('<') and len(title) < 200:
+                    return title
             elif isinstance(v, str) and v.strip() and not v.startswith('<'):
                 title = _clean_text_content(v)
                 if title:
@@ -172,30 +338,120 @@ def _guess_page_id(properties: Dict[str, Any]) -> Optional[str]:
 
 def build_pages_from_document(document) -> List[OneNotePage]:
     """
-    Iterate document.get_properties() and construct OneNotePage instances.
-
-    document.get_properties() is expected to return an iterable of property dictionaries.
-    For each property-set, this function extracts text using the decoders and
-    recursive walker, and maps common keys to `page_id` and `title`.
+    Build pages from rich-text nodes with clean text and selected metadata.
     """
     pages: List[OneNotePage] = []
-    props_iterable = []
+    seen_signatures = set()
+
+    # 1) Build page skeletons from page metadata (best source for page boundaries/title)
+    meta_pages = _build_page_metadata_candidates(document)
+
+    # 2) Collect latest rich-text snippets
     try:
-        props_iterable = list(document.get_properties())
+        richtext_nodes = _latest_nodes_by_oid(document.get_nodes_by_jcid(["jcidRichTextOENode"]))
     except Exception:
-        # best-effort: if get_properties is not iterable, return empty list
+        richtext_nodes = []
+
+    snippets: List[Dict[str, Any]] = []
+    for node in richtext_nodes:
+        if not hasattr(node, "propertySet") or not hasattr(node.propertySet, "body"):
+            continue
+        props = node.propertySet.body.get_properties()
+        text = _extract_text_from_richtext_properties(props)
+        if not text:
+            continue
+        modified = _parse_datetime(props.get("LastModifiedTime"))
+        snippets.append(
+            {
+                "text": text,
+                "modified": modified,
+                "metadata": _extract_important_page_metadata(props),
+            }
+        )
+
+    if meta_pages:
+        # Assign snippets to nearest page creation timestamp.
+        bucketed: List[List[Dict[str, Any]]] = [[] for _ in range(len(meta_pages))]
+        for snip in snippets:
+            if snip["modified"] is None:
+                bucketed[0].append(snip)
+                continue
+
+            nearest_index = 0
+            nearest_delta = None
+            for i, meta in enumerate(meta_pages):
+                created = meta["created"]
+                if created is None:
+                    continue
+                delta = abs((snip["modified"] - created).total_seconds())
+                if nearest_delta is None or delta < nearest_delta:
+                    nearest_delta = delta
+                    nearest_index = i
+            bucketed[nearest_index].append(snip)
+
+        for i, meta in enumerate(meta_pages):
+            title = meta["title"] or f"Page {i + 1}"
+            parts: List[str] = []
+            for snip in bucketed[i]:
+                t = snip["text"].strip()
+                if _is_header_like_snippet(t, title):
+                    continue
+                if t not in parts:
+                    parts.append(t)
+            if not parts:
+                # Fallback: keep at least one meaningful snippet even if it equals title.
+                preferred = None
+                for snip in bucketed[i]:
+                    t = snip["text"].strip()
+                    if not t or _time_only_re.match(t) or _iso_datetime_re.match(t):
+                        continue
+                    if title and (t == title or title in t or t in title):
+                        preferred = t
+                        break
+                    if preferred is None:
+                        preferred = t
+                if preferred:
+                    parts.append(preferred)
+            content = _clean_text_content("\n".join(parts))
+
+            # Keep page even if content is empty; title from metadata is still useful.
+            signature = (title.strip(), content.strip())
+            if signature in seen_signatures:
+                continue
+            seen_signatures.add(signature)
+
+            page_metadata = dict(meta["metadata"])
+            # Merge sparse metadata from snippets.
+            for snip in bucketed[i]:
+                for k, v in snip["metadata"].items():
+                    if k not in page_metadata or not page_metadata[k]:
+                        page_metadata[k] = v
+
+            pages.append(
+                OneNotePage(
+                    page_id=meta["page_id"],
+                    title=title,
+                    content=content,
+                    properties=page_metadata,
+                )
+            )
         return pages
 
-    for prop in props_iterable:
-        if not isinstance(prop, dict):
-            # skip unexpected shapes
+    # Fallback path when page metadata is unavailable.
+    for i, snip in enumerate(snippets):
+        title = f"Page {i + 1}"
+        signature = (title.strip(), snip["text"].strip())
+        if signature in seen_signatures:
             continue
-        content_text = extract_text_from_properties(prop)
-        page_id = _guess_page_id(prop)
-        title = _guess_page_title(prop)
-        page = OneNotePage(page_id=page_id, title=title, content=content_text, properties=prop)
-        pages.append(page)
-
+        seen_signatures.add(signature)
+        pages.append(
+            OneNotePage(
+                page_id=f"page-{i}",
+                title=title,
+                content=snip["text"],
+                properties=snip["metadata"],
+            )
+        )
     return pages
 
 
@@ -297,9 +553,6 @@ def _build_tree_structure(document) -> tuple:
         section_nodes = document.find_section_nodes()
         section_group_nodes = document.find_section_group_nodes()
         
-        # Get actual page content from RichTextOENode (not metadata)
-        richtext_nodes = document.get_nodes_by_jcid(['jcidRichTextOENode'])
-        
         # Build sections
         sections_dict = {}
         for section_node in section_nodes:
@@ -315,58 +568,8 @@ def _build_tree_structure(document) -> tuple:
                 group = build_section_group_from_nodes(sg_node)
                 section_groups.append(group)
         
-# Extract pages from RichTextOENode objects (deduplicated and merged)
-        all_pages = []
-        seen_ids = set()
-        pages_by_title = {}  # Track pages by title to merge fragments
-        
-        for i, rt_node in enumerate(richtext_nodes):
-            if hasattr(rt_node, 'propertySet') and hasattr(rt_node.propertySet, 'body'):
-                props = rt_node.propertySet.body.get_properties()
-                
-                # Skip nodes that don't have actual text content
-                if 'RichEditTextUnicode' not in props:
-                    continue
-                
-                # Get page ID from the node
-                page_id = None
-                if hasattr(rt_node, 'data') and hasattr(rt_node.data, 'body'):
-                    page_id = str(rt_node.data.body.oid)
-                
-                # Skip duplicates
-                if page_id and page_id in seen_ids:
-                    continue
-                if page_id:
-                    seen_ids.add(page_id)
-                
-                # Extract text content
-                text = props['RichEditTextUnicode']
-                if isinstance(text, bytes):
-                    try:
-                        text = text.decode('utf-16le')
-                    except:
-                        try:
-                            text = text.decode('utf-8')
-                        except:
-                            text = ""
-                
-                # Clean the text content
-                content_text = _clean_text_content(str(text)) if text else ""
-                
-                # Skip empty pages
-                if not content_text:
-                    continue
-                
-                # Use the text as both title and content (unless we can extract a better title)
-                title = content_text.split('\n')[0][:100] if content_text else f"Page {len(all_pages) + 1}"
-                
-                # Try to extract explicit title if available
-                explicit_title = _extract_clean_title(props)
-                if explicit_title:
-                    title = explicit_title
-                    page = OneNotePage(page_id=page_id, title=title, content=content_text)
-                    all_pages.append(page)
-                    pages_by_title[title] = page
+        # Extract pages once via the reliable rich-text path.
+        all_pages = build_pages_from_document(document)
         
         # Map pages to sections (distribute evenly)
         section_to_pages_map = {sid: [] for sid in sections_dict.keys()}
@@ -421,4 +624,71 @@ def build_notebook_from_document(document) -> OneNoteNotebook:
     notebook.title = "OneNote Notebook"
     notebook.properties = {}  # Don't keep raw properties
     
+    return notebook
+
+
+def build_notebook_from_directory(notebook_dir: str) -> OneNoteNotebook:
+    """
+    Build a notebook hierarchy from a directory that contains .one files.
+
+    Mapping:
+    - directory -> OneNoteSectionGroup
+    - .one file -> OneNoteSection
+    - extracted text nodes -> OneNotePage
+    """
+    root = Path(notebook_dir)
+    if not root.exists() or not root.is_dir():
+        raise FileNotFoundError(f"Notebook directory not found: {notebook_dir}")
+
+    from .parser import OneNoteParser
+
+    def _build_group(dir_path: Path) -> OneNoteSectionGroup:
+        group = OneNoteSectionGroup(
+            group_id=str(dir_path.resolve()),
+            title=dir_path.name,
+            sections=[],
+            section_groups=[],
+            properties={
+                "path": str(dir_path.resolve()),
+            },
+        )
+
+        one_files = sorted(dir_path.glob("*.one"), key=lambda p: p.name.lower())
+        for one_file in one_files:
+            parser = OneNoteParser(str(one_file))
+            pages = build_pages_from_document(parser.document)
+            section = OneNoteSection(
+                section_id=str(one_file.resolve()),
+                title=one_file.stem,
+                pages=pages,
+                properties={
+                    "file_name": one_file.name,
+                    "file_path": str(one_file.resolve()),
+                    "page_count": len(pages),
+                },
+            )
+            group.sections.append(section)
+
+        subdirs = sorted([p for p in dir_path.iterdir() if p.is_dir()], key=lambda p: p.name.lower())
+        for subdir in subdirs:
+            child_group = _build_group(subdir)
+            if child_group.sections or child_group.section_groups:
+                group.section_groups.append(child_group)
+
+        group.properties["section_count"] = len(group.sections)
+        group.properties["section_group_count"] = len(group.section_groups)
+        return group
+
+    root_group = _build_group(root)
+    notebook = OneNoteNotebook(
+        notebook_id=str(root.resolve()),
+        title=root.name,
+        sections=root_group.sections,
+        section_groups=root_group.section_groups,
+        properties={
+            "path": str(root.resolve()),
+            "section_count": len(root_group.sections),
+            "section_group_count": len(root_group.section_groups),
+        },
+    )
     return notebook

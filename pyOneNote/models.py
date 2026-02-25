@@ -16,13 +16,6 @@ class OneNotePage:
             # Auto-extract title from properties if not provided
             if not self.title:
                 self.title = self._extract_title_from_properties()
-            
-            # Auto-extract content from properties if not provided
-            if not self.content:
-                self.content = self._extract_content_from_properties()
-            
-            # Clear properties after extraction to keep only text
-            self.properties = {}
 
     def _extract_title_from_properties(self) -> Optional[str]:
         """Try to extract title from common property keys."""
@@ -92,8 +85,6 @@ class OneNoteSection:
         if self.properties and isinstance(self.properties, dict):
             if not self.title:
                 self.title = self._extract_title_from_properties()
-            # Clear properties after extraction
-            self.properties = {}
 
     def _extract_title_from_properties(self) -> Optional[str]:
         """Try to extract title from common property keys."""
@@ -133,8 +124,6 @@ class OneNoteSectionGroup:
         if self.properties and isinstance(self.properties, dict):
             if not self.title:
                 self.title = self._extract_title_from_properties()
-            # Clear properties after extraction
-            self.properties = {}
 
     def _extract_title_from_properties(self) -> Optional[str]:
         """Try to extract title from common property keys."""
@@ -189,19 +178,17 @@ class OneNoteNotebook:
         try:
             # Import here to avoid circular imports
             from .parser import OneNoteParser
+            from .exporter import build_notebook_from_directory
             
             path = Path(file_path)
             
-            # If path is a directory, find the first .one file
+            # If path is a directory, build full hierarchy from all .one files
             if path.is_dir():
-                one_files = list(path.rglob("*.one"))
-                if not one_files:
-                    raise FileNotFoundError(f"No .one files found in {file_path}")
-                file_path = str(one_files[0])
-            
-            # Parse the file
-            parser = OneNoteParser(file_path)
-            parsed_notebook = parser.get_notebook()
+                parsed_notebook = build_notebook_from_directory(str(path))
+            else:
+                # Parse a single .one file
+                parser = OneNoteParser(file_path)
+                parsed_notebook = parser.get_notebook()
             
             # Copy parsed data to self
             self.notebook_id = parsed_notebook.notebook_id

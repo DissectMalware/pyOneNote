@@ -579,6 +579,7 @@ class ObjectSpaceObjectStreamOfIDs:
         res = None
         if self.head < len(self.body):
             res = self.body[self.head]
+            self.head += 1
         return res
 
     def reset(self):

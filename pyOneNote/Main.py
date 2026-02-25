@@ -76,15 +76,6 @@ def process_onenote_file(file_path, output_dir, extension, json_output):
     return json.dumps(data)
 
 
-def get_hex_format(hex_str, col, indent):
-    res = ''
-    chars = (col*2)
-    for i in range(math.ceil( len(hex_str)/chars)):
-        segment = hex_str[i*chars: (i+1)*chars]
-        res += indent + ' '.join([segment[i:i+2] for i in range(0, len(segment), 2)]) +'\n'
-    return res
-
-
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("-f", "--file", action="store", help="File to analyze", required=True)
@@ -95,10 +86,9 @@ def main():
     args = p.parse_args()
 
     if not os.path.exists(args.file):
-        sys.exit("File: %s doesn't exist", args.file)
+        sys.exit(f"File doesn't exist: {args.file}")
 
-    with open(args.file, "rb") as file:
-        process_onenote_file(file, args.output_dir, args.extension, args.json)
+    process_onenote_file(args.file, args.output_dir, args.extension, args.json)
         
 
 if __name__ == "__main__":

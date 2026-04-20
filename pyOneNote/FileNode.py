@@ -552,7 +552,12 @@ class FileDataStoreObject:
         self.guidFooter = uuid.UUID(bytes_le=self.guidFooter)
 
     def __str__(self):
-        return self.FileData[:128].hex()
+        fd = self.FileData
+        if isinstance(fd, (bytes, bytearray)):
+            return fd[:128].hex()
+        if isinstance(fd, str):
+            return fd[:128]
+        return repr(fd)[:128]
 
 
 class ObjectSpaceObjectPropSet:
@@ -668,7 +673,14 @@ class PropertySet:
                         try:
                             propertyVal = self.rgData[i].Data.decode('utf-16')
                         except:
-                            propertyVal = self.rgData[i].Data.hex()
+                            data = self.rgData[i].Data
+                            if isinstance(data, (bytes, bytearray)):
+                                propertyVal = data.hex()
+                            elif isinstance(data, str):
+                                # Already decoded somewhere upstream; pass through.
+                                propertyVal = data
+                            else:
+                                propertyVal = repr(data)
                 else:
                     property_name_lower =  propertyName.lower()
                     if 'time' in property_name_lower:
@@ -759,7 +771,11 @@ class PrtFourBytesOfLengthFollowedByData:
         self.Data, = struct.unpack('{}s'.format(self.cb), file.read(self.cb))
 
     def __str__(self):
-        return self.Data.hex()
+        if isinstance(self.Data, (bytes, bytearray)):
+            return self.Data.hex()
+        if isinstance(self.Data, str):
+            return self.Data
+        return repr(self.Data)
 
 
 class PropertyID:

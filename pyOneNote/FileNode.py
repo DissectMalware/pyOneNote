@@ -13,7 +13,17 @@ class FileNodeListHeader:
 
 class FileNodeList:
     def __init__(self, file, document, file_chunk_reference):
-        file.seek(file_chunk_reference.stp)
+        # `stp` can be out-of-range (negative when interpreted signed, or > 2**63)
+        # on partially-corrupt or padded files. `file.seek` then raises:
+        #     ValueError: cannot fit 'int' into an offset-sized integer
+        # which would otherwise abort parsing of the entire document. Treat such a
+        # reference as an empty list so the surrounding tree can still be parsed.
+        try:
+            file.seek(file_chunk_reference.stp)
+        except (OverflowError, ValueError, OSError):
+            self.end = file_chunk_reference.stp
+            self.fragments = []
+            return
         self.end = file_chunk_reference.stp + file_chunk_reference.cb
         self.fragments = []
 
@@ -469,15 +479,21 @@ class CompactID:
         self.document = document
         self.current_revision = self.document.cur_revision
 
+    def _resolve_guid(self):
+        try:
+            return self.document._global_identification_table[self.current_revision][self.guidIndex]
+        except KeyError:
+            # 0xFFFFFF (16777215) is the documented "invalid" sentinel; other misses
+            # can also occur on cross-revision references when the global identification
+            # table for the current revision was not (yet) fully populated. Returning a
+            # readable placeholder here keeps the rest of the document parseable.
+            return '<unresolved guidIndex=0x{:06x}>'.format(self.guidIndex)
+
     def __str__(self):
-        return '<ExtendedGUID> ({}, {})'.format(
-        self.document._global_identification_table[self.current_revision][self.guidIndex],
-        self.n)
+        return '<ExtendedGUID> ({}, {})'.format(self._resolve_guid(), self.n)
 
     def __repr__(self):
-        return '<ExtendedGUID> ({}, {})'.format(
-        self.document._global_identification_table[self.current_revision][self.guidIndex],
-        self.n)
+        return '<ExtendedGUID> ({}, {})'.format(self._resolve_guid(), self.n)
 
 
 class JCID:
@@ -569,11 +585,26 @@ class ObjectSpaceObjectPropSet:
 
 class ObjectSpaceObjectStreamOfIDs:
     def __init__(self, file, document):
-        self.header = ObjectSpaceObjectStreamHeader(file)
         self.body = []
         self.head = 0
+        try:
+            self.header = ObjectSpaceObjectStreamHeader(file)
+        except struct.error:
+            # Truncated stream at header read — synthesize an empty header so callers
+            # that check .header.OsidStreamNotPresent / .ExtendedStreamsPresent / .Count
+            # do not also need to special-case a missing attribute.
+            class _EmptyHeader:
+                Count = 0
+                ExtendedStreamsPresent = False
+                OsidStreamNotPresent = True
+            self.header = _EmptyHeader()
+            return
         for i in range(self.header.Count):
-            self.body.append(CompactID(file, document))
+            try:
+                self.body.append(CompactID(file, document))
+            except struct.error:
+                # Truncated mid-stream — stop reading and let the caller use what we have.
+                break
 
     def read(self):
         res = None
@@ -596,7 +627,11 @@ class ObjectSpaceObjectStreamHeader:
 class PropertySet:
     def __init__(self, file, OIDs, OSIDs, ContextIDs, document):
         self.current = file.tell()
-        self.cProperties, = struct.unpack('<H', file.read(2))
+        try:
+            self.cProperties, = struct.unpack('<H', file.read(2))
+        except struct.error:
+            # Truncated stream — treat as an empty property set.
+            self.cProperties = 0
         self.rgPrids = []
         self.indent = ''
         self.document = document

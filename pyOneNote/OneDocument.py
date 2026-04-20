@@ -69,8 +69,19 @@ class OneDocment:
     def get_json(self):
         files_in_hex = {}
         for key, file in self.get_files().items():
+            content = file['content']
+            if isinstance(content, (bytes, bytearray)):
+                content_hex = content.hex()
+            elif isinstance(content, str):
+                # Already a string; encode to bytes first to keep JSON output hex-only.
+                try:
+                    content_hex = content.encode('latin-1').hex()
+                except UnicodeEncodeError:
+                    content_hex = content.encode('utf-8', errors='replace').hex()
+            else:
+                content_hex = b''.hex()
             files_in_hex[key] = {'extension': file['extension'],
-                                 'content': file['content'].hex(),
+                                 'content': content_hex,
                                  'identity': file['identity']}
 
         res = {

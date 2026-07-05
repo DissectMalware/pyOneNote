@@ -174,10 +174,11 @@ class FileNode:
             # no data part
             self.data = None
         else:
-            p = 1
+            # Unknown / terminator node types have no data part either.
+            self.data = None
 
         current_offset = file.tell()
-        if self.file_node_header.baseType == 2:
+        if self.file_node_header.baseType == 2 and self.data is not None:
             self.children.append(FileNodeList(file, self.document, self.data.ref))
         file.seek(current_offset)
 

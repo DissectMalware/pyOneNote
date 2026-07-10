@@ -9,6 +9,7 @@ DEBUG = False
 class FileNodeListHeader:
     def __init__(self, file):
         self.uintMagic, self.FileNodeListID, self.nFragmentSequence = struct.unpack('<8sII', file.read(16))
+        assert self.uintMagic == b'\xc4\xf4\xf7\xf5\xb1zV\xa4'
 
 
 class FileNodeList:
@@ -107,7 +108,7 @@ class FileNode:
         self.document= document
         self.file_node_header = FileNodeHeader(file)
         if DEBUG:
-            print(str(file.tell()) + ' ' + self.file_node_header.file_node_type + ' ' + str(self.file_node_header.baseType))
+            print(str(hex(file.tell())) + ' ' + self.file_node_header.file_node_type + ' ' + str(self.file_node_header.baseType))
         self.children = []
         FileNode.count += 1
         if self.file_node_header.file_node_type == "ObjectGroupStartFND":
@@ -172,13 +173,15 @@ class FileNode:
             self.document.cur_revision = self.data.base.rid
         elif self.file_node_header.file_node_type in ["RevisionManifestEndFND", "ObjectGroupEndFND"]:
             # no data part
+
             self.data = None
         else:
             p = 1
 
         current_offset = file.tell()
         if self.file_node_header.baseType == 2:
-            self.children.append(FileNodeList(file, self.document, self.data.ref))
+            if not (self.data.ref.stp == 0 and self.data.ref.cb == 0):
+                self.children.append(FileNodeList(file, self.document, self.data.ref))
         file.seek(current_offset)
 
 
@@ -245,7 +248,7 @@ class FileNodeChunkReference:
         return res
 
     def __repr__(self):
-        return 'FileChunkReference:(stp:{}, cb:{})'.format(self.stp, self.cb)
+        return 'FileNodeChunkReference:(stp:{}, cb:{})'.format(self.stp, self.cb)
 
 
 class FileChunkReference64x32(FileNodeChunkReference):
@@ -383,7 +386,12 @@ class FileDataStoreObjectReferenceFND:
         self.guidReference = uuid.UUID(bytes_le=self.guidReference)
         current_offset = file.tell()
         file.seek(self.ref.stp)
-        self.fileDataStoreObject = FileDataStoreObject(file, self.ref)
+        try:
+            self.fileDataStoreObject = FileDataStoreObject(file, self.ref)
+        except:  # noqa
+            # print(f'Error for datastore at {hex(current_offset)} // {self.ref.stp}')
+            self.fileDataStoreObject = None
+            pass
         file.seek(current_offset)
 
     def __str__(self):

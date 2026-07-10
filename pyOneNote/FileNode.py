@@ -143,10 +143,27 @@ class FileNode:
                 file.seek(self.data.ref.stp)
                 self.propertySet = ObjectSpaceObjectPropSet(file, document)
             file.seek(current_offset)
+        elif self.file_node_header.file_node_type == "ObjectDeclaration2LargeRefCountFND":
+            self.data = ObjectDeclaration2LargeRefCountFND(file, self.document, self.file_node_header)
+            current_offset = file.tell()
+            if self.data.body.jcid.IsPropertySet:
+                file.seek(self.data.ref.stp)
+                self.propertySet = ObjectSpaceObjectPropSet(file, document)
+            file.seek(current_offset)
         elif self.file_node_header.file_node_type == "ReadOnlyObjectDeclaration2LargeRefCountFND":
             self.data = ReadOnlyObjectDeclaration2LargeRefCountFND(file, self.document, self.file_node_header)
+            current_offset = file.tell()
+            if self.data.base.body.jcid.IsPropertySet:
+                file.seek(self.data.base.ref.stp)
+                self.propertySet = ObjectSpaceObjectPropSet(file, document)
+            file.seek(current_offset)
         elif self.file_node_header.file_node_type == "ReadOnlyObjectDeclaration2RefCountFND":
             self.data = ReadOnlyObjectDeclaration2RefCountFND(file, self.document, self.file_node_header)
+            current_offset = file.tell()
+            if self.data.base.body.jcid.IsPropertySet:
+                file.seek(self.data.base.ref.stp)
+                self.propertySet = ObjectSpaceObjectPropSet(file, document)
+            file.seek(current_offset)
         elif self.file_node_header.file_node_type == "FileDataStoreListReferenceFND":
             self.data = FileDataStoreListReferenceFND(file, self.file_node_header)
         elif self.file_node_header.file_node_type == "FileDataStoreObjectReferenceFND":
@@ -174,10 +191,10 @@ class FileNode:
             # no data part
             self.data = None
         else:
-            p = 1
+            self.data = None
 
         current_offset = file.tell()
-        if self.file_node_header.baseType == 2:
+        if self.file_node_header.baseType == 2 and self.data is not None:
             self.children.append(FileNodeList(file, self.document, self.data.ref))
         file.seek(current_offset)
 
@@ -638,9 +655,19 @@ class PropertySet:
                     count, = struct.unpack('<I', file.read(4))
                 self.rgData.append(self.get_compact_ids(ContextIDs, count))
             elif type == 0x10:
-                raise NotImplementedError('ArrayOfPropertyValues is not implement')
+                # prtArrayOfPropertyValues ([MS-ONESTORE] 2.6.9): cProperties
+                # (4 bytes), then if cProperties > 0 a prid PropertyID
+                # (4 bytes, always type 0x11/PropertySet) followed by that
+                # many nested PropertySet structures.
+                count, = struct.unpack('<I', file.read(4))
+                array_data = []
+                if count > 0:
+                    PropertyID(file)  # prid header, type is always 0x11 here
+                    for _ in range(count):
+                        array_data.append(PropertySet(file, OIDs, OSIDs, ContextIDs, document))
+                self.rgData.append(array_data)
             elif type == 0x11:
-                self.rgData.append(PropertySet(file))
+                self.rgData.append(PropertySet(file, OIDs, OSIDs, ContextIDs, document))
             else:
                 raise ValueError('rgPrids[i].type is not valid')
 
@@ -664,6 +691,12 @@ class PropertySet:
                 if isinstance(self.rgData[i], PrtFourBytesOfLengthFollowedByData):
                     if 'guid' in propertyName.lower():
                         propertyVal = uuid.UUID(bytes_le=self.rgData[i].Data).hex
+                    elif propertyName == 'TextExtendedAscii':
+                        # OneNote for Mac stores plain-text runs as single-byte
+                        # (latin-1) text under this property, instead of the
+                        # UTF-16 RichEditTextUnicode Windows OneNote uses.
+                        # Decoding it as utf-16 either garbles it or throws.
+                        propertyVal = self.rgData[i].Data.decode('latin-1')
                     else:
                         try:
                             propertyVal = self.rgData[i].Data.decode('utf-16')

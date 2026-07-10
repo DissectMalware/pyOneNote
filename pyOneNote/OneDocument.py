@@ -24,7 +24,18 @@ class OneDocment:
         if self._properties:
             return self._properties
         nodes = []
-        filters = ['ObjectDeclaration2RefCountFND']
+        # ObjectDeclaration2LargeRefCountFND is used for objects whose
+        # reference count doesn't fit in one byte (e.g. more heavily-shared
+        # or larger page content), and the ReadOnly* variants wrap either
+        # declaration with an extra md5Hash. All four carry the same
+        # propertySet-bearing body and were previously excluded here, which
+        # silently dropped any text stored under them.
+        filters = [
+            'ObjectDeclaration2RefCountFND',
+            'ObjectDeclaration2LargeRefCountFND',
+            'ReadOnlyObjectDeclaration2RefCountFND',
+            'ReadOnlyObjectDeclaration2LargeRefCountFND',
+        ]
 
         self._properties = []
 
@@ -32,7 +43,9 @@ class OneDocment:
         for node in nodes:
             if hasattr(node, 'propertySet'):
                 node.propertySet.body.indent= '\t\t'
-                self._properties.append({'type': str(node.data.body.jcid), 'identity':str(node.data.body.oid), 'val':node.propertySet.body.get_properties()})
+                # ReadOnly* variants wrap the declaration in `.base`.
+                decl_body = node.data.base.body if hasattr(node.data, 'base') else node.data.body
+                self._properties.append({'type': str(decl_body.jcid), 'identity':str(decl_body.oid), 'val':node.propertySet.body.get_properties()})
 
         return  self._properties
 

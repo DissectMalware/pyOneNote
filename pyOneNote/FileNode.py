@@ -647,13 +647,28 @@ class PropertySet:
                     count, = struct.unpack('<I', file.read(4))
                 self.rgData.append(self.get_compact_ids(ContextIDs, count))
             elif type == 0x10:
+                # prtArrayOfPropertyValues ([MS-ONESTORE] 2.6.9): the prid
+                # header "MUST NOT be present if cProperties is zero", so it
+                # must not be read unconditionally. The nested PropertySets
+                # are collected into a single list and appended once --
+                # self.rgData is index-aligned with self.rgPrids/cProperties,
+                # so appending them individually here (as the original
+                # candidate implementation did) desyncs that alignment for
+                # every property after this one.
                 cproperties, = struct.unpack('<I', file.read(4))
-                prid = PropertyID(file)
-                assert prid.type == 0x11, "prtArrayOfPropertyValues.prid.type out of spec!"
-                for _ in range(cproperties):
-                    self.rgData.append(PropertySet(file, OIDs, OSIDs, ContextIDs, document))
+                array_data = []
+                if cproperties > 0:
+                    prid = PropertyID(file)
+                    assert prid.type == 0x11, "prtArrayOfPropertyValues.prid.type out of spec!"
+                    for _ in range(cproperties):
+                        array_data.append(PropertySet(file, OIDs, OSIDs, ContextIDs, document))
+                self.rgData.append(array_data)
             elif type == 0x11:
-                self.rgData.append(PropertySet(file))
+                # PropertySet.__init__ requires (file, OIDs, OSIDs,
+                # ContextIDs, document); the single-arg call here would raise
+                # TypeError as soon as a standalone (non-array) 0x11 property
+                # was encountered.
+                self.rgData.append(PropertySet(file, OIDs, OSIDs, ContextIDs, document))
             else:
                 raise ValueError('rgPrids[i].type is not valid')
 

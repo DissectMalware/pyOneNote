@@ -2,6 +2,7 @@ import uuid
 import struct
 from datetime import datetime, timedelta
 import locale
+import math
 
 DEBUG = False
 
@@ -9,6 +10,7 @@ DEBUG = False
 class FileNodeListHeader:
     def __init__(self, file):
         self.uintMagic, self.FileNodeListID, self.nFragmentSequence = struct.unpack('<8sII', file.read(16))
+        assert self.uintMagic == b'\xc4\xf4\xf7\xf5\xb1zV\xa4'
 
 
 class FileNodeList:
@@ -107,7 +109,7 @@ class FileNode:
         self.document= document
         self.file_node_header = FileNodeHeader(file)
         if DEBUG:
-            print(str(file.tell()) + ' ' + self.file_node_header.file_node_type + ' ' + str(self.file_node_header.baseType))
+            print(str(hex(file.tell())) + ' ' + self.file_node_header.file_node_type + ' ' + str(self.file_node_header.baseType))
         self.children = []
         FileNode.count += 1
         if self.file_node_header.file_node_type == "ObjectGroupStartFND":
@@ -172,13 +174,15 @@ class FileNode:
             self.document.cur_revision = self.data.base.rid
         elif self.file_node_header.file_node_type in ["RevisionManifestEndFND", "ObjectGroupEndFND"]:
             # no data part
+
             self.data = None
         else:
             p = 1
 
         current_offset = file.tell()
         if self.file_node_header.baseType == 2:
-            self.children.append(FileNodeList(file, self.document, self.data.ref))
+            if hasattr(self, 'data') and not (self.data.ref.stp == 0 and self.data.ref.cb == 0):
+                self.children.append(FileNodeList(file, self.document, self.data.ref))
         file.seek(current_offset)
 
 
@@ -245,7 +249,7 @@ class FileNodeChunkReference:
         return res
 
     def __repr__(self):
-        return 'FileChunkReference:(stp:{}, cb:{})'.format(self.stp, self.cb)
+        return 'FileNodeChunkReference:(stp:{}, cb:{})'.format(self.stp, self.cb)
 
 
 class FileChunkReference64x32(FileNodeChunkReference):
@@ -383,7 +387,12 @@ class FileDataStoreObjectReferenceFND:
         self.guidReference = uuid.UUID(bytes_le=self.guidReference)
         current_offset = file.tell()
         file.seek(self.ref.stp)
-        self.fileDataStoreObject = FileDataStoreObject(file, self.ref)
+        try:
+            self.fileDataStoreObject = FileDataStoreObject(file, self.ref)
+        except:  # noqa
+            # print(f'Error for datastore at {hex(current_offset)} // {self.ref.stp}')
+            self.fileDataStoreObject = None
+            pass
         file.seek(current_offset)
 
     def __str__(self):
@@ -638,9 +647,28 @@ class PropertySet:
                     count, = struct.unpack('<I', file.read(4))
                 self.rgData.append(self.get_compact_ids(ContextIDs, count))
             elif type == 0x10:
-                raise NotImplementedError('ArrayOfPropertyValues is not implement')
+                # prtArrayOfPropertyValues ([MS-ONESTORE] 2.6.9): the prid
+                # header "MUST NOT be present if cProperties is zero", so it
+                # must not be read unconditionally. The nested PropertySets
+                # are collected into a single list and appended once --
+                # self.rgData is index-aligned with self.rgPrids/cProperties,
+                # so appending them individually here (as the original
+                # candidate implementation did) desyncs that alignment for
+                # every property after this one.
+                cproperties, = struct.unpack('<I', file.read(4))
+                array_data = []
+                if cproperties > 0:
+                    prid = PropertyID(file)
+                    assert prid.type == 0x11, "prtArrayOfPropertyValues.prid.type out of spec!"
+                    for _ in range(cproperties):
+                        array_data.append(PropertySet(file, OIDs, OSIDs, ContextIDs, document))
+                self.rgData.append(array_data)
             elif type == 0x11:
-                self.rgData.append(PropertySet(file))
+                # PropertySet.__init__ requires (file, OIDs, OSIDs,
+                # ContextIDs, document); the single-arg call here would raise
+                # TypeError as soon as a standalone (non-array) 0x11 property
+                # was encountered.
+                self.rgData.append(PropertySet(file, OIDs, OSIDs, ContextIDs, document))
             else:
                 raise ValueError('rgPrids[i].type is not valid')
 
@@ -683,6 +711,7 @@ class PropertySet:
                             'offset' in property_name_lower or \
                             'margin' in property_name_lower:
                         size, = struct.unpack('<f', self.rgData[i])
+
                         propertyVal = PropertySet.half_inch_size_to_pixels(size)
                     elif 'langid' in property_name_lower:
                         lcid, =struct.unpack('<H', self.rgData[i])
@@ -712,7 +741,8 @@ class PropertySet:
 
         # Calculate the number of pixels
         pixels = picture_width * pixels_per_half_inch
-
+        if math.isnan(pixels):
+            return 0
         return int(pixels)
 
     [staticmethod]

@@ -180,7 +180,7 @@ class FileNode:
 
         current_offset = file.tell()
         if self.file_node_header.baseType == 2:
-            if not (self.data.ref.stp == 0 and self.data.ref.cb == 0):
+            if hasattr(self, 'data') and not (self.data.ref.stp == 0 and self.data.ref.cb == 0):
                 self.children.append(FileNodeList(file, self.document, self.data.ref))
         file.seek(current_offset)
 

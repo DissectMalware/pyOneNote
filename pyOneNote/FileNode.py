@@ -174,10 +174,13 @@ class FileNode:
             # no data part
             self.data = None
         else:
-            p = 1
+            # Unrecognised FileNodeID: leave data unset rather than crashing later.
+            self.data = None
 
         current_offset = file.tell()
-        if self.file_node_header.baseType == 2:
+        # Only recurse into a child FileNodeList when this node actually carries a reference.
+        if self.file_node_header.baseType == 2 and getattr(self, "data", None) is not None \
+                and hasattr(self.data, "ref"):
             self.children.append(FileNodeList(file, self.document, self.data.ref))
         file.seek(current_offset)
 
@@ -638,9 +641,18 @@ class PropertySet:
                     count, = struct.unpack('<I', file.read(4))
                 self.rgData.append(self.get_compact_ids(ContextIDs, count))
             elif type == 0x10:
-                raise NotImplementedError('ArrayOfPropertyValues is not implement')
+                # ArrayOfPropertyValues ([MS-ONESTORE] 2.6.9): count, then (only if count>0)
+                # a single prototype PropertyID, then `count` PropertySet structures.
+                array_count, = struct.unpack('<I', file.read(4))
+                array = []
+                if array_count > 0:
+                    PropertyID(file)  # prototype prid, shared by every element
+                    for _ in range(array_count):
+                        array.append(PropertySet(file, OIDs, OSIDs, ContextIDs, document))
+                self.rgData.append(array)
             elif type == 0x11:
-                self.rgData.append(PropertySet(file))
+                # Nested PropertySet: draws ObjectIDs from the same parent streams.
+                self.rgData.append(PropertySet(file, OIDs, OSIDs, ContextIDs, document))
             else:
                 raise ValueError('rgPrids[i].type is not valid')
 
@@ -664,11 +676,12 @@ class PropertySet:
                 if isinstance(self.rgData[i], PrtFourBytesOfLengthFollowedByData):
                     if 'guid' in propertyName.lower():
                         propertyVal = uuid.UUID(bytes_le=self.rgData[i].Data).hex
+                    elif 'extendedascii' in propertyName.lower():
+                        # TextExtendedAscii is single-byte, not UTF-16 — decoding it as
+                        # UTF-16 mangles ASCII into CJK (and odd lengths fell back to hex).
+                        propertyVal = self.rgData[i].Data.decode('cp1252', errors='replace')
                     else:
-                        try:
-                            propertyVal = self.rgData[i].Data.decode('utf-16')
-                        except:
-                            propertyVal = self.rgData[i].Data.hex()
+                        propertyVal = self.rgData[i].Data.decode('utf-16-le', errors='replace')
                 else:
                     property_name_lower =  propertyName.lower()
                     if 'time' in property_name_lower:
